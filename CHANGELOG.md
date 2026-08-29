@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.0.3
+
+[compare changes](https://github.com/nrjdalal/rate-my-ott/compare/v0.0.2...v0.0.3)
+
+### 🩹 Fixes
+
+- **ci:** Rebuild the imdb index in one serial transaction so neon's smallest compute completes it ([#4](https://github.com/nrjdalal/rate-my-ott/pull/4))
+- **ci:** Send each index batch as one json parameter so neon can plan it ([#6](https://github.com/nrjdalal/rate-my-ott/pull/6))
+
+### ❤️ Contributors
+
+- Neeraj Dalal @nrjdalal
+
 ## v0.0.2
 
 [compare changes](https://github.com/nrjdalal/rate-my-ott/compare/v0.0.1...v0.0.2)
