@@ -2,33 +2,10 @@ import { db, imdbName, imdbSync, imdbTitle } from "@packages/db"
 import { desc, eq, inArray } from "drizzle-orm"
 
 import { ApiError } from "@/lib/error"
-import {
-  imdbType,
-  resolveOutcome,
-  searchKey,
-  type ImdbTitle,
-  type MissReason,
-  type Outcome,
-} from "@/lib/imdb"
-import {
-  alignTo,
-  titleVariants,
-  uniqueQueries,
-  type TitleQuery,
-  type TitleType,
-} from "@/lib/lookup"
+import { resolveOutcome, searchKey, toRating, type ImdbTitle, type Rating } from "@/lib/imdb"
+import { alignTo, titleVariants, uniqueQueries, type TitleQuery } from "@/lib/lookup"
 
-// One answer: the title the index matched, or a miss that still says what was asked and why it missed. A found title nobody has rated yet says "unrated".
-export type Rating = {
-  found: boolean
-  imdbId: string | null
-  imdbRating: number | null
-  imdbVotes: number | null
-  reason: MissReason | "unrated" | null
-  title: string
-  type: TitleType | "unknown"
-  year: number | null
-}
+export type { Rating } from "@/lib/imdb"
 
 // The index rows whose name matches any spelling of any of the queries, in one round trip, grouped by the spelling's key.
 async function imdbCandidates(queries: TitleQuery[]): Promise<Map<string, ImdbTitle[]>> {
@@ -49,30 +26,6 @@ async function imdbCandidates(queries: TitleQuery[]): Promise<Map<string, ImdbTi
   }
   return found
 }
-
-// A miss keeps the asked-for title, year, and type, so the answer still says what was looked up.
-const toRating = (query: TitleQuery, { reason, title }: Outcome): Rating =>
-  title
-    ? {
-        found: true,
-        imdbId: title.id,
-        imdbRating: title.rating,
-        imdbVotes: title.votes,
-        reason: title.rating === null ? "unrated" : null,
-        title: title.primaryTitle,
-        type: imdbType(title.titleType) ?? "unknown",
-        year: title.startYear,
-      }
-    : {
-        found: false,
-        imdbId: null,
-        imdbRating: null,
-        imdbVotes: null,
-        reason,
-        title: query.title.trim(),
-        type: query.type ?? "unknown",
-        year: query.year ?? null,
-      }
 
 const indexEmpty = async () => {
   const [row] = await db.select({ id: imdbTitle.id }).from(imdbTitle).limit(1)

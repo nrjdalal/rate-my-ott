@@ -33,9 +33,11 @@ const edgesOf = (props: Record<string, unknown>): unknown[] | undefined => {
   return entities && Array.isArray(entities.edges) ? entities.edges : undefined
 }
 
+// An edge's entity: the node's unifiedEntity in a browse row, or the node itself where a row (Continue Watching) carries the video record directly.
 const entityOf = (edge: unknown): Record<string, unknown> | null => {
-  if (!isRecord(edge) || !isRecord(edge.node) || !isRecord(edge.node.unifiedEntity)) return null
-  return edge.node.unifiedEntity
+  if (!isRecord(edge) || !isRecord(edge.node)) return null
+  if (isRecord(edge.node.unifiedEntity)) return edge.node.unifiedEntity
+  return typeof edge.node.videoId === "number" ? edge.node : null
 }
 
 // The kind a video record states (a legacy videoModel, or the video of a card in the modal's "More Like This" row), its year (a show's latest season), and a film's length in minutes from its seconds (a show's runtime is 0 or an episode's, not a length worth matching on).
@@ -141,6 +143,11 @@ export function readEntity(card: Element, maxDepth = 40): Entity | null {
       if (videoId !== undefined && edges) break
     }
     fiber = fiber.return ?? null
+  }
+  // A linked card whose own props never name its id (a Continue Watching card) is still the card its link names; its label is its title.
+  if (videoId === undefined && linked !== undefined && edges) {
+    videoId = linked
+    title = label ?? undefined
   }
   if (videoId === undefined) return null
   const entity = edges?.map(entityOf).find((ue) => ue !== null && ue.videoId === videoId)

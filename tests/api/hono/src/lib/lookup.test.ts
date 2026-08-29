@@ -22,31 +22,58 @@ describe("lookupKey", () => {
 })
 
 describe("titleSpellings", () => {
-  test("tries the title as given, then without a qualifier, then without a subtitle", () => {
-    expect(titleVariants("The Office (U.S.)")).toEqual(["The Office (U.S.)", "The Office"])
+  test("tries the title as given, then without a qualifier, then without a subtitle, each with its article dropped or put on", () => {
+    expect(titleVariants("The Office (U.S.)")).toEqual([
+      "The Office (U.S.)",
+      "Office (U.S.)",
+      "The Office",
+      "Office",
+    ])
     expect(titleVariants("Grand Theft Auto VI: An Extended Look")).toEqual([
       "Grand Theft Auto VI: An Extended Look",
+      "The Grand Theft Auto VI: An Extended Look",
       "Grand Theft Auto VI",
+      "The Grand Theft Auto VI",
     ])
     expect(titleVariants("  Dune  (2021): Part  One ")).toEqual([
       "Dune (2021): Part One",
+      "The Dune (2021): Part One",
       "Dune: Part One",
+      "The Dune: Part One",
       "Dune",
+      "The Dune",
     ])
-    expect(titleVariants("Dune")).toEqual(["Dune"])
-    expect(titleVariants("(2021)")).toEqual(["(2021)"])
+    expect(titleVariants("Dune")).toEqual(["Dune", "The Dune"])
+    expect(titleVariants("(2021)")).toEqual(["(2021)", "The (2021)"])
   })
 
-  test("only the unsubtitled spelling is loose, and never when it is the title itself", () => {
+  test("the article is dropped whichever it is, and the platform's spelling always comes first", () => {
+    expect(titleVariants("Devil's Advocate")).toEqual(["Devil's Advocate", "The Devil's Advocate"])
+    expect(titleVariants("A Quiet Place")).toEqual(["A Quiet Place", "Quiet Place"])
+    expect(titleVariants("An Education")).toEqual(["An Education", "Education"])
+    expect(titleVariants("the office")).toEqual(["the office", "office"])
+    // A word that merely starts like an article is left alone, and so is the article on its own.
+    expect(titleVariants("Theodore")).toEqual(["Theodore", "The Theodore"])
+    expect(titleVariants("The")).toEqual(["The", "The The"])
+  })
+
+  test("only the unsubtitled spelling is loose, its article variant with it, and never the title itself", () => {
     expect(titleSpellings("The Office (U.S.)")).toEqual([
       { loose: false, spelling: "The Office (U.S.)" },
+      { loose: false, spelling: "Office (U.S.)" },
       { loose: false, spelling: "The Office" },
+      { loose: false, spelling: "Office" },
     ])
     expect(titleSpellings("Dune: Part Two")).toEqual([
       { loose: false, spelling: "Dune: Part Two" },
+      { loose: false, spelling: "The Dune: Part Two" },
       { loose: true, spelling: "Dune" },
+      { loose: true, spelling: "The Dune" },
     ])
-    expect(titleSpellings("Dune")).toEqual([{ loose: false, spelling: "Dune" }])
+    expect(titleSpellings("Dune")).toEqual([
+      { loose: false, spelling: "Dune" },
+      { loose: false, spelling: "The Dune" },
+    ])
   })
 })
 

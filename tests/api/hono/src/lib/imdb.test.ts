@@ -22,6 +22,7 @@ import {
   shouldPrune,
   staleNames,
   toImdbTitle,
+  toRating,
   VOTES_DOMINANCE,
   type ImdbBasics,
   type ImdbTitle,
@@ -261,11 +262,20 @@ describe("keepTitle and names", () => {
 })
 
 describe("fitsQuery", () => {
-  test("a film fits within a year and five minutes; a same-name stranger does not", () => {
+  test("a film fits within a year and ten minutes; a same-name stranger does not", () => {
     // Netflix's "Alpha" (2026 there, 140 minutes) against the Hindi film (2025, 141) and the French one (2025, 128).
     expect(fitsQuery(title(), { runtime: 140, title: "Alpha", type: "movie", year: 2026 })).toBe(
       true,
     )
+    // Netflix's cut of "Bhooth Bangla" runs 163 minutes to IMDb's 173.
+    expect(
+      fitsQuery(title({ runtime: 173 }), {
+        runtime: 163,
+        title: "Alpha",
+        type: "movie",
+        year: 2026,
+      }),
+    ).toBe(true)
     expect(
       fitsQuery(title({ runtime: 128 }), {
         runtime: 140,
@@ -472,6 +482,26 @@ describe("pickImdbTitle", () => {
     expect(pickImdbTitle([old, known], { title: "Ikka", type: "series", year: 2021 }, at)).toBe(
       known,
     )
+  })
+
+  test("a namesake too new to have earned its votes denies dominance only from as close to the stated year as the best", () => {
+    // Netflix's "Desire" (2026, no runtime on the card) against a 2025 film of the name with 12 votes: the year Netflix states is the popular film's exactly, the small one is the tolerance at work.
+    const desire = title({ id: "tt27", runtime: 97, startYear: 2026, votes: 3080 })
+    const moham = title({ id: "tt28", runtime: 111, startYear: 2025, votes: 12 })
+    expect(pickImdbTitle([moham, desire], { title: "Desire", type: "movie", year: 2026 }, at)).toBe(
+      desire,
+    )
+    // The other way round, the new film sits on the stated year and the popular one a year off: as likely Netflix's, so no guess.
+    const fresh = title({ id: "tt29", runtime: null, startYear: 2026, votes: 40 })
+    const famous = title({ id: "tt30", runtime: null, startYear: 2025, votes: 5000 })
+    expect(
+      pickImdbTitle([famous, fresh], { title: "Beta", type: "movie", year: 2026 }, at),
+    ).toBeNull()
+    // Both on the stated year: no guess either.
+    const twin = title({ id: "tt31", runtime: null, startYear: 2026, votes: 5000 })
+    expect(
+      pickImdbTitle([twin, fresh], { title: "Beta", type: "movie", year: 2026 }, at),
+    ).toBeNull()
   })
 
   test("a candidate the statements cannot verify drops out, but vetoes a far less popular pick", () => {
@@ -809,16 +839,25 @@ describe("resolveTitle", () => {
   })
 })
 
-describe("resolveOutcome", () => {
+describe("resolveOutcome and toRating", () => {
   const alpha = title({ id: "tt28363783", runtime: 141, startYear: 2025, votes: 24000 })
   const wolf = title({ id: "tt6194322", runtime: 96, startYear: 2018, votes: 90000 })
+  const parent = title({
+    endYear: null,
+    id: "tt10919420",
+    runtime: 55,
+    startYear: 2021,
+    titleType: "tvSeries",
+    votes: 774354,
+  })
   const index = new Map<string, ImdbTitle[]>([
     ["Alpha", [alpha, wolf]],
     ["Brand New Film", [title({ id: "tt31000001", rating: null, startYear: 2026, votes: null })]],
+    ["Dune", [title({ id: "tt1160419", runtime: 155, startYear: 2021, votes: 1086538 })]],
   ])
   const lookup = (spelling: string) => index.get(spelling) ?? []
 
-  test("says why a query got no title", () => {
+  test("says why a query got no title, and unknown when only a loose spelling had candidates", () => {
     expect(resolveOutcome({ title: "Alpha", type: "movie" }, lookup, NOW)).toEqual({
       reason: "unstated",
       title: null,
@@ -830,20 +869,107 @@ describe("resolveOutcome", () => {
       reason: "unmatched",
       title: null,
     })
+    expect(
+      resolveOutcome({ runtime: 60, title: "Alpha", type: "movie", year: 2025 }, lookup, NOW),
+    ).toEqual({ reason: "unmatched", title: null })
     expect(resolveOutcome({ title: "Alpha", type: "movie", year: 2018 }, lookup, NOW)).toEqual({
       reason: null,
       title: wolf,
     })
+    // A subtitled film refused under the loose spelling has no namesake: the name is unknown, not unmatched.
+    expect(
+      resolveOutcome({ title: "Dune: Part Two", type: "movie", year: 2024 }, lookup, NOW),
+    ).toEqual({ reason: "unknown", title: null })
+  })
+
+  test("every ambiguity reads as ambiguous", () => {
+    const at = NOW
     const twin = title({ id: "tt2", runtime: null, startYear: 2025, votes: 20000 })
-    const ambiguous = (spelling: string) => (spelling === "Alpha" ? [alpha, twin] : [])
-    expect(resolveOutcome({ title: "Alpha", type: "movie", year: 2025 }, ambiguous, NOW)).toEqual({
-      reason: "ambiguous",
-      title: null,
+    const undecided = (spelling: string) => (spelling === "Alpha" ? [alpha, twin] : [])
+    expect(
+      resolveOutcome({ title: "Alpha", type: "movie", year: 2025 }, undecided, at).reason,
+    ).toBe("ambiguous")
+    const unrated = title({ id: "tt3", runtime: null, startYear: 2025, votes: null })
+    expect(
+      resolveOutcome(
+        { title: "Alpha", type: "movie", year: 2025 },
+        (s) => (s === "Alpha" ? [alpha, unrated] : []),
+        at,
+      ).reason,
+    ).toBe("ambiguous")
+    const famous = title({ id: "tt4", runtime: null, startYear: 2025, votes: 500000 })
+    const measured = title({ id: "tt5", runtime: 138, startYear: 2024, votes: 20 })
+    expect(
+      resolveOutcome(
+        { runtime: 140, title: "Alpha", type: "movie", year: 2025 },
+        (s) => (s === "Alpha" ? [famous, measured] : []),
+        at,
+      ).reason,
+    ).toBe("ambiguous")
+    const akaOne = title({ aka: true, id: "tt6", runtime: null, startYear: 2025, votes: 100 })
+    const akaTwo = title({ aka: true, id: "tt7", runtime: null, startYear: 2025, votes: 100000 })
+    expect(
+      resolveOutcome(
+        { title: "Alpha", type: "movie", year: 2025 },
+        (s) => (s === "Alpha" ? [akaOne, akaTwo] : []),
+        at,
+      ).reason,
+    ).toBe("ambiguous")
+    const show = title({
+      id: "tt8",
+      runtime: null,
+      startYear: 2025,
+      titleType: "tvSeries",
+      votes: 100,
     })
     expect(
-      resolveOutcome({ title: "Brand New Film", type: "movie", year: 2026 }, lookup, NOW).title
-        ?.rating,
-    ).toBeNull()
+      resolveOutcome(
+        { title: "Alpha", year: 2025 },
+        (s) => (s === "Alpha" ? [alpha, show] : []),
+        at,
+      ).reason,
+    ).toBe("ambiguous")
+    expect(
+      resolveOutcome(
+        { title: "Squid Game: The Recruit", type: "series", year: 2025 },
+        (s) => (s === "Squid Game" ? [parent] : []),
+        at,
+      ),
+    ).toEqual({ reason: null, title: parent })
+  })
+
+  test("toRating carries the index's answer, or the miss with its reason and what was asked", () => {
+    expect(
+      toRating({ title: "Alpha", type: "movie", year: 2018 }, { reason: null, title: wolf }),
+    ).toEqual({
+      found: true,
+      imdbId: "tt6194322",
+      imdbRating: 6.1,
+      imdbVotes: 90000,
+      reason: null,
+      title: "Alpha",
+      type: "movie",
+      year: 2018,
+    })
+    const fresh = title({ id: "tt31000001", rating: null, startYear: 2026, votes: null })
+    expect(
+      toRating({ title: "Brand New Film", year: 2026 }, { reason: null, title: fresh }),
+    ).toMatchObject({ found: true, imdbRating: null, reason: "unrated" })
+    expect(
+      toRating(
+        { title: "  Nothing Here ", type: "series", year: 2026 },
+        { reason: "unknown", title: null },
+      ),
+    ).toEqual({
+      found: false,
+      imdbId: null,
+      imdbRating: null,
+      imdbVotes: null,
+      reason: "unknown",
+      title: "Nothing Here",
+      type: "series",
+      year: 2026,
+    })
   })
 })
 

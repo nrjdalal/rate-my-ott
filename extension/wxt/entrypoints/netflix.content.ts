@@ -18,7 +18,7 @@ import {
   renderBillboardRating,
   renderPanel,
 } from "@/utils/netflix"
-import type { Miss, PageReport } from "@/utils/report"
+import { buildReport, type PaintItem } from "@/utils/report"
 import { readSettings, settings, withDefaults, type Settings } from "@/utils/settings"
 
 // How long to collect newly seen titles before asking for them in one batch, and how often to rescan regardless of mutations (Netflix swaps artwork and virtualizes rows without always mutating what the observer watches).
@@ -38,9 +38,8 @@ export default defineContentScript({
   async main(ctx) {
     let current: Settings = await readSettings()
     const answers = new Map<string, Rating | null>()
-    // What this tab asked about, by query key, for the popup's "why no score" list.
-    const asked = new Map<string, TitleQuery>()
-    let reported = ""
+    // What the last paint saw on screen, for the popup's "why no score" list; asked for, never pushed, so the list is this tab's and current.
+    let lastPaint: PaintItem[] = []
     const failedAt = new Map<string, number>()
     const inflight = new Set<string>()
     const pending = new Map<string, TitleQuery>()
@@ -60,34 +59,12 @@ export default defineContentScript({
       return undefined
     }
 
-    // After a paint, tell the background what this tab knows, when it changed: the titles with a score, and the ones without and why.
-    const report = () => {
-      let rated = 0
-      const misses: Miss[] = []
-      for (const [key, query] of asked) {
-        const rating = answers.get(key)
-        if (rating === undefined) continue
-        if (rating && rating.imdbRating !== null) rated += 1
-        else {
-          const miss: Miss = {
-            reason: rating?.reason ?? (rating ? "unrated" : "unknown"),
-            title: query.title,
-          }
-          // The request type accepts anything coercible for the year; only a number is worth listing.
-          if (typeof query.year === "number") miss.year = query.year
-          misses.push(miss)
-        }
-      }
-      const next: PageReport = { misses, rated }
-      const serialized = JSON.stringify(next)
-      if (serialized === reported) return
-      reported = serialized
-      const message: Message = { report: next, type: "page:report" }
-      browser.runtime.sendMessage(message).catch(() => undefined)
-    }
-
     const paint = () => {
-      if (!current.enabled) return
+      const items: PaintItem[] = []
+      if (!current.enabled) {
+        lastPaint = []
+        return
+      }
       if (current.badges) {
         for (const card of findCards(document)) {
           const info = readCard(card)
@@ -95,6 +72,7 @@ export default defineContentScript({
           // A card whose stamp no longer names it is being recycled for another title: its badge goes until the new stamp lands. A card is asked about only once the page has named its year: the API answers nothing without one, so a card the MAIN-world script never stamps (Netflix moved its internals) simply stays bare.
           if (info.pending || !info.year) {
             if (info.pending) renderBadge(card, null)
+            else items.push({ reason: "unstated", title: info.title })
             continue
           }
           const query: TitleQuery = {
@@ -105,7 +83,7 @@ export default defineContentScript({
           }
           const rating = ask(query)
           const key = keyOf(query)
-          asked.set(key, query)
+          items.push({ key, query })
           if (rating !== undefined && !hasBadge(card, key)) {
             renderBadge(card, rating, key, current.dimBelow)
           }
@@ -115,6 +93,7 @@ export default defineContentScript({
       if (billboard && billboard.query.year) {
         const rating = ask(billboard.query)
         const key = keyOf(billboard.query)
+        items.push({ key, query: billboard.query })
         if (rating !== undefined && !hasBillboardRating(billboard.anchor, key)) {
           renderBillboardRating(billboard.anchor, rating, key)
         }
@@ -123,11 +102,12 @@ export default defineContentScript({
       if (modal && modal.query.year) {
         const rating = ask(modal.query)
         const key = keyOf(modal.query)
+        items.push({ key, query: modal.query })
         if (rating !== undefined && !hasPanel(modal.anchor, key)) {
           renderPanel(modal.anchor, rating, key)
         }
       }
-      report()
+      lastPaint = items
     }
 
     const flush = async () => {
@@ -174,6 +154,13 @@ export default defineContentScript({
       failedAt.clear()
       removeAll(document)
       paint()
+    })
+
+    // The popup asks this tab for its report; the answer is built from the last paint and the answers so far, so it is this tab's and current, and survives a background restart.
+    browser.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {
+      if (message.type !== "page:latest") return false
+      sendResponse(buildReport(lastPaint, answers))
+      return false
     })
 
     const observer = new MutationObserver(scheduleScan)

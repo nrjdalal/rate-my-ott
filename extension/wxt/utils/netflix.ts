@@ -191,6 +191,10 @@ export function readModal(root: ParentNode): ModalInfo | null {
   if (!anchor) return null
   const parsedYear = Number(text(modal.querySelector(".year"))?.match(/\d{4}/)?.[0]) || undefined
   const duration = text(modal.querySelector(".duration")) ?? ""
+  // "1h 39m" is the film's length, the strongest thing to check a namesake against, where the props stated none.
+  const hours = Number(duration.match(/(\d+)\s*h/i)?.[1] ?? 0)
+  const minutes = Number(duration.match(/(\d+)\s*m/i)?.[1] ?? 0)
+  const parsedRuntime = hours * 60 + minutes || undefined
   // "6 Episodes", "3 Seasons", or "Limited Series" for a show; "2h 33m" for a film.
   const parsedType = /season|episode|series/i.test(duration)
     ? ("series" as const)
@@ -205,7 +209,7 @@ export function readModal(root: ParentNode): ModalInfo | null {
   const stamped = { ...fromCard, ...own }
   const year = stamped.year ?? parsedYear
   const type = stamped.type ?? parsedType
-  const runtime = stamped.runtime
+  const runtime = stamped.runtime ?? (type === "movie" ? parsedRuntime : undefined)
   return {
     anchor,
     kind: details ? "details" : "line",

@@ -281,18 +281,18 @@ describe("the hover preview", () => {
     expect(modal!.anchor.textContent).toBe("A1h 45mHD")
   })
 
-  test("a preview whose card is gone keeps its title and its duration's kind but no year, and an unstamped one is nothing to ask about", () => {
+  test("a preview whose card is gone keeps its title and its duration's kind and length but no year, and an unstamped one is nothing to ask about", () => {
     const alone = page(MINI.replace(/<a [^>]*>.*?<\/a>\n/s, ""))
-    expect(readModal(alone)?.query).toEqual({ title: "72 HOURS", type: "movie" })
+    expect(readModal(alone)?.query).toEqual({ runtime: 105, title: "72 HOURS", type: "movie" })
     expect(readModal(page(MINI.replace(/ data-rmo-[a-z]+="[^"]*"| data-rmo-meta/g, "")))).toBeNull()
   })
 })
 
 describe("readModal and renderPanel", () => {
-  test("reads the title, year, and kind, and inserts the ratings row after the metadata", () => {
+  test("reads the title, year, kind, and length from its metadata text, and inserts the ratings row after the metadata", () => {
     const doc = page(MODAL)
     const modal = readModal(doc)
-    expect(modal?.query).toEqual({ title: "Dune", type: "movie", year: 2021 })
+    expect(modal?.query).toEqual({ runtime: 155, title: "Dune", type: "movie", year: 2021 })
     expect(modal?.anchor.className).toBe("previewModal--detailsMetadata-right")
     expect(modal?.kind).toBe("details")
 

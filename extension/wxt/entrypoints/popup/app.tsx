@@ -5,11 +5,28 @@ import { browser } from "wxt/browser"
 import { SwitchRow } from "@/components/switch-row"
 import { useSettings } from "@/components/use-settings"
 import { compactCount, relativeTime } from "@/utils/format"
-import type { IndexReply, LatestReply, Message } from "@/utils/messages"
+import type { IndexReply, Message } from "@/utils/messages"
 import { groupMisses, summarize, type PageReport } from "@/utils/report"
 
 // What the popup says about the index: unknown while asking, then the API's answer or its failure.
 type Status = { state: "asking" } | { reply: IndexReply; state: "answered" }
+
+// The report of the Netflix tab the popup opened over: the active tab first, then any other tab of the window that answers (the popup itself, opened as a tab, is not one). A tab that is not Netflix has no listener and rejects, which is the answer.
+async function askTab(): Promise<PageReport | null> {
+  const message: Message = { type: "page:latest" }
+  const tabs = await browser.tabs.query({ currentWindow: true })
+  tabs.sort((a, b) => Number(b.active) - Number(a.active))
+  for (const tab of tabs) {
+    if (tab.id === undefined) continue
+    try {
+      const reply = (await browser.tabs.sendMessage(tab.id, message)) as PageReport | undefined
+      if (reply) return reply
+    } catch {
+      continue
+    }
+  }
+  return null
+}
 
 export function App() {
   const [current, update] = useSettings()
@@ -17,11 +34,7 @@ export function App() {
   const [page, setPage] = useState<PageReport | null>(null)
 
   useEffect(() => {
-    const latest: Message = { type: "page:latest" }
-    browser.runtime
-      .sendMessage(latest)
-      .then((reply: LatestReply | undefined) => setPage(reply?.report ?? null))
-      .catch(() => setPage(null))
+    askTab().then(setPage)
     const message: Message = { type: "api:index" }
     browser.runtime
       .sendMessage(message)
@@ -71,14 +84,14 @@ export function App() {
       ) : (
         <p className="py-4 text-center text-xs text-neutral-500">Loading…</p>
       )}
-      {page && (
+      {page && (page.rated > 0 || page.misses.length > 0) && (
         <section aria-labelledby="page" className="mt-3 text-xs">
           <h2 id="page" className="font-semibold text-neutral-700 dark:text-neutral-300">
             This Netflix tab: {summarize(page)}
           </h2>
           {groupMisses(page.misses).map((group) => (
             <details key={group.reason} className="mt-1 text-neutral-500">
-              <summary className="cursor-pointer">
+              <summary>
                 {group.titles.length} {group.why}
               </summary>
               <ul className="mt-1 max-h-32 list-disc overflow-y-auto pl-4">

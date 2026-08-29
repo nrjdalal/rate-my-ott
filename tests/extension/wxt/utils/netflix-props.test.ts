@@ -59,6 +59,45 @@ describe("readEntity", () => {
     expect(readEntity(cardWithFibers(null))).toEqual({ title: "Alpha", videoId: 82023350 })
   })
 
+  // A Continue Watching card links to /watch/, its own props never name its id, and its row carries the video records themselves as the edges' nodes.
+  test("a Continue Watching card is the card its link names, with its label as its title and the row's record as its entity", () => {
+    const window = new Window({ url: "https://www.netflix.com/browse" })
+    window.document.body.innerHTML = `<a href="/watch/81715790?trackId=14170287" aria-label="Bhooth Bangla" data-uia="progress-card"><div><img alt=""></div></a>`
+    const anchor = window.document.querySelector("a") as unknown as Element
+    const row = {
+      memoizedProps: {
+        sectionFragment: {
+          entities: {
+            edges: [
+              { node: { __typename: "Show", releaseYear: 2024, videoId: 2 } },
+              {
+                node: {
+                  __typename: "Movie",
+                  releaseYear: 2026,
+                  runtimeSec: 10380,
+                  videoId: 81715790,
+                },
+              },
+            ],
+          },
+        },
+      },
+      return: null,
+    }
+    const card = { memoizedProps: { progress: 0.4 }, return: { memoizedProps: {}, return: row } }
+    ;(anchor as unknown as Record<string, unknown>)["__reactFiber$abc123"] = {
+      memoizedProps: { "data-uia": "progress-card" },
+      return: card,
+    }
+    expect(readEntity(anchor)).toEqual({
+      runtime: 173,
+      title: "Bhooth Bangla",
+      type: "movie",
+      videoId: 81715790,
+      year: 2026,
+    })
+  })
+
   // The legacy card (.title-card on genre pages) carries one videoModel; a show states its latest season's year and no length, a film its length in seconds.
   test("a legacy card reads its videoModel: the id, title, year, and kind, and a film's length", () => {
     const legacy = (model: Record<string, unknown>) => {
