@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.0.4
+
+[compare changes](https://github.com/nrjdalal/rate-my-ott/compare/v0.0.3...v0.0.4)
+
+### 🩹 Fixes
+
+- **extension:** Remember a miss for ten minutes, not twelve hours ([#7](https://github.com/nrjdalal/rate-my-ott/pull/7))
+
+### ❤️ Contributors
+
+- Neeraj Dalal @nrjdalal
+
 ## v0.0.3
 
 [compare changes](https://github.com/nrjdalal/rate-my-ott/compare/v0.0.2...v0.0.3)
