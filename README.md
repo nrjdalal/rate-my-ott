@@ -2,7 +2,7 @@
 
 > IMDb ratings on every title while you browse Netflix, with more streaming platforms to come.
 
-A browser extension plus the small API behind it, built on [ZeroStarter](https://zerostarter.dev). The extension reads the titles Netflix renders, asks the Ratings API in batches, and paints an IMDb badge on every card and an "IMDb:" row in the title modal's details. The API answers from its own IMDb index: IMDb's daily datasets, imported into Postgres every night, matched by name, kind, year, and runtime.
+A browser extension plus the small API behind it, built on [ZeroStarter](https://zerostarter.dev). The extension reads the titles Netflix renders, asks the Ratings API in batches, and paints an IMDb badge on every card, "• IMDb 8.5" in the billboard's metadata line, "IMDb 8.5" in the hover preview, and an "IMDb:" row in the title modal's details. The API answers from its own IMDb index: IMDb's daily datasets, imported into Postgres every night, matched by name, kind, year, and runtime.
 
 ## Monorepo structure
 
@@ -13,25 +13,29 @@ A browser extension plus the small API behind it, built on [ZeroStarter](https:/
 ├── web/next/        # Website (Next.js App Router): landing page + MDX docs
 └── packages/
     ├── config/      # site.ts (brand identity + feature flags), TS/tsdown bases
-    ├── db/          # Drizzle schema (the `imdb_title` and `imdb_name` index tables) + migrations
+    ├── db/          # Drizzle schema (the `imdb_title` and `imdb_name` index tables, the `imdb_sync` rebuild records) + migrations
     └── env/         # Type-safe env, one validated entry per consumer
 ```
 
 Types flow from the API to both clients: the extension and the web app call it through `hc<AppType>`, so a change to the ratings route retypes every caller.
 
-## Quick start
+## Use it
+
+Download [rate-my-ott-chrome.zip](https://github.com/nrjdalal/rate-my-ott/releases/latest/download/rate-my-ott-chrome.zip) (or [the Firefox zip](https://github.com/nrjdalal/rate-my-ott/releases/latest/download/rate-my-ott-firefox.zip)), unzip it, load the folder from `chrome://extensions` with Developer mode on, and open Netflix. Nothing to run, nothing to configure: the build talks to the hosted API. The [install guide](web/next/content/docs/getting-started/install.mdx) has the Firefox steps and what to check if nothing shows.
+
+## Develop
 
 ```bash
 # install, migrate (POSTGRES_URL is set by `zerostarter init`, or set it yourself), build the IMDb index, run
 bun install
 bun run db:migrate
-bun run imdb:sync   # ~235 MB from IMDb, under a minute
+bun run imdb:sync   # ~750 MB from IMDb, a minute or two
 bun run dev
 ```
 
 `bun run dev` serves the web app and the API on named portless `.localhost` URLs (`bunx portless list`) and builds the extension in watch mode into `extension/wxt/.output/chrome-mv3-dev`. Load that directory in Chrome (`chrome://extensions`, Developer mode, Load unpacked), open the extension's Options page, and point it at the API URL portless printed. `PORTLESS=0 bun run dev` uses fixed ports instead (web `:3000`, API `:4000`, which is also the extension's baked-in default).
 
-📖 [Install guide](web/next/content/docs/getting-started/install.mdx) · [Ratings API](web/next/content/docs/getting-started/ratings-api.mdx)
+📖 [Run the stack](web/next/content/docs/getting-started/development.mdx) · [Ratings API](web/next/content/docs/getting-started/ratings-api.mdx)
 
 ## Scripts
 
@@ -51,7 +55,7 @@ bun run dev
 
 ## Releases
 
-Promoting `canary` to `main` cuts a release (changelog, version bump, GitHub release), and the release workflow attaches the extension zips built against the production API: `rate-my-ott-<version>-chrome.zip` and `-firefox.zip`, on [releases/latest](https://github.com/nrjdalal/rate-my-ott/releases/latest). The extension's manifest version is the repo version, so a zip, the changelog, and a store listing agree.
+Promoting `canary` to `main` cuts a release (changelog, version bump, GitHub release), and the release workflow attaches the extension zips built against the production API: `rate-my-ott-<version>-chrome.zip` and `-firefox.zip`, on [releases/latest](https://github.com/nrjdalal/rate-my-ott/releases/latest), plus unversioned copies (`rate-my-ott-chrome.zip`, `rate-my-ott-firefox.zip`) so the `releases/latest/download/` links stay stable. The extension's manifest version is the repo version, so a zip, the changelog, and a store listing agree.
 
 ## Deployment
 

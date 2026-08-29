@@ -1,5 +1,5 @@
-import { db, imdbName, imdbTitle } from "@packages/db"
-import { eq, inArray } from "drizzle-orm"
+import { db, imdbName, imdbSync, imdbTitle } from "@packages/db"
+import { desc, eq, inArray } from "drizzle-orm"
 
 import { ApiError } from "@/lib/error"
 import { imdbType, resolveTitle, searchKey, type ImdbTitle } from "@/lib/imdb"
@@ -30,13 +30,13 @@ async function imdbCandidates(queries: TitleQuery[]): Promise<Map<string, ImdbTi
   const found = new Map<string, ImdbTitle[]>()
   if (keys.length === 0) return found
   const rows = await db
-    .select({ key: imdbName.key, title: imdbTitle })
+    .select({ aka: imdbName.aka, key: imdbName.key, title: imdbTitle })
     .from(imdbName)
     .innerJoin(imdbTitle, eq(imdbName.titleId, imdbTitle.id))
     .where(inArray(imdbName.key, keys))
   for (const row of rows) {
     const list = found.get(row.key) ?? []
-    list.push(row.title)
+    list.push({ ...row.title, aka: row.aka })
     found.set(row.key, list)
   }
   return found
@@ -86,4 +86,10 @@ export async function lookupRatings(queries: TitleQuery[]): Promise<Rating[]> {
     ]),
   )
   return alignTo(queries, byKey)
+}
+
+// The newest rebuild's record, or null while the index has never been built.
+export async function indexStatus() {
+  const [row] = await db.select().from(imdbSync).orderBy(desc(imdbSync.finishedAt)).limit(1)
+  return row ?? null
 }

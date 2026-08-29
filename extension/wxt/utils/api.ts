@@ -11,6 +11,10 @@ type RatingsPost = Client["api"]["v1"]["ratings"]["$post"]
 export type TitleQuery = InferRequestType<RatingsPost>["json"]["titles"][number]
 export type Rating = InferResponseType<RatingsPost, 200>["data"]["ratings"][number]
 
+type IndexGet = Client["api"]["v1"]["ratings"]["status"]["$get"]
+
+export type IndexStatus = NonNullable<InferResponseType<IndexGet, 200>["data"]["index"]>
+
 // Standard error shape, matching the jsonError envelope in api/hono/src/lib/error.ts plus the transport codes unwrap itself produces.
 export type ApiError = {
   code: ErrorCode | "NETWORK_ERROR" | "UNKNOWN_ERROR"

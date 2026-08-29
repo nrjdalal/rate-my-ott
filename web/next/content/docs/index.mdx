@@ -6,7 +6,7 @@ description: IMDb ratings on every title while you browse Netflix, with more str
 
 # Introduction
 
-Rate My OTT is a browser extension that puts the IMDb rating on every title while you browse Netflix. Each title card gets one small yellow label with the score in its top-right corner, and the title modal gets an "IMDb:" row with the score and vote count beside its cast and genres, linking to the IMDb page. Other streaming platforms come next.
+Rate My OTT is a browser extension that puts the IMDb rating on every title while you browse Netflix. Each title card gets one small yellow label with the score in its top-right corner (the modal's "More Like This" cards in the top-left, beside Netflix's own duration), the hero at the top of a page gets "• IMDb 8.5" in its metadata line, the preview that opens when you hover a card gets "IMDb 8.5" beside its duration, and the title modal gets an "IMDb:" row with the score and vote count beside its cast and genres, linking to the IMDb page. Search results stay bare: Netflix states no year for them, and the extension never guesses. Other streaming platforms come next.
 
 ## How it works
 
@@ -21,6 +21,6 @@ A Bun + Turborepo monorepo, built on [ZeroStarter](https://zerostarter.dev):
 - `extension/wxt`: the extension (WXT, React): the Netflix content script, the background worker, a popup, and an options page.
 - `api/hono`: the Ratings API (Hono), with an interactive reference at [`/api/docs`](/api/docs).
 - `web/next`: this site.
-- `packages/db`, `packages/env`, `packages/config`: the Drizzle schema (the `imdb_title` and `imdb_name` index tables), validated env, and the brand config.
+- `packages/db`, `packages/env`, `packages/config`: the Drizzle schema (the `imdb_title` and `imdb_name` index tables, the `imdb_sync` rebuild records), validated env, and the brand config.
 
-Start with [Install](/docs/getting-started/install), then read how the [Ratings API](/docs/getting-started/ratings-api) is shaped.
+[Install](/docs/getting-started/install) is all a user needs. To work on it, [Run the stack](/docs/getting-started/development), then read how the [Ratings API](/docs/getting-started/ratings-api) is shaped.

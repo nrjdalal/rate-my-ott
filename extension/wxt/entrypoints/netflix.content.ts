@@ -7,12 +7,15 @@ import type { LookupReply, Message } from "@/utils/messages"
 import {
   findCards,
   hasBadge,
+  hasBillboardRating,
   STAMP,
   hasPanel,
+  readBillboard,
   readCard,
   readModal,
   removeAll,
   renderBadge,
+  renderBillboardRating,
   renderPanel,
 } from "@/utils/netflix"
 import { DEFAULT_SETTINGS, settings, type Settings } from "@/utils/settings"
@@ -58,21 +61,38 @@ export default defineContentScript({
       if (current.badges) {
         for (const card of findCards(document)) {
           const info = readCard(card)
-          // A card is asked about only once the page has named its year: the API answers nothing without one, so a card the MAIN-world script never stamps (Netflix moved its internals) simply stays bare.
-          if (!info || info.pending || !info.year) continue
-          const rating = ask({
+          if (!info) continue
+          // A card whose stamp no longer names it is being recycled for another title: its badge goes until the new stamp lands. A card is asked about only once the page has named its year: the API answers nothing without one, so a card the MAIN-world script never stamps (Netflix moved its internals) simply stays bare.
+          if (info.pending || !info.year) {
+            if (info.pending) renderBadge(card, null)
+            continue
+          }
+          const query: TitleQuery = {
             title: info.title,
             ...(info.runtime ? { runtime: info.runtime } : {}),
             ...(info.type ? { type: info.type } : {}),
-            ...(info.year ? { year: info.year } : {}),
-          })
-          if (rating !== undefined && !hasBadge(card)) renderBadge(card, rating)
+            year: info.year,
+          }
+          const rating = ask(query)
+          const key = keyOf(query)
+          if (rating !== undefined && !hasBadge(card, key)) renderBadge(card, rating, key)
+        }
+      }
+      const billboard = readBillboard(document)
+      if (billboard && billboard.query.year) {
+        const rating = ask(billboard.query)
+        const key = keyOf(billboard.query)
+        if (rating !== undefined && !hasBillboardRating(billboard.anchor, key)) {
+          renderBillboardRating(billboard.anchor, rating, key)
         }
       }
       const modal = readModal(document)
       if (modal && modal.query.year) {
         const rating = ask(modal.query)
-        if (rating !== undefined && !hasPanel(modal.anchor)) renderPanel(modal.anchor, rating)
+        const key = keyOf(modal.query)
+        if (rating !== undefined && !hasPanel(modal.anchor, key)) {
+          renderPanel(modal.anchor, rating, key)
+        }
       }
     }
 

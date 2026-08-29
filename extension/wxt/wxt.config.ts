@@ -18,13 +18,27 @@ export default defineConfig({
   dev: { server: { port: 3005 } },
   // Explicit imports only (`wxt/browser`, `wxt/utils/*`), like the rest of the monorepo; nothing is injected as a global.
   imports: false,
-  manifest: ({ mode }) => ({
+  // Manifest V3 for Firefox too (WXT would default it to V2), so both builds share one background and one set of permissions.
+  manifestVersion: 3,
+  manifest: ({ browser, mode }) => ({
     name: site.name,
     // The repo's release version (bumped by the canary-to-main release flow), so a store listing, a release zip, and the changelog all say the same number; the workspace's own package.json stays at 0.0.0 like every other workspace.
     version: pkg.version,
     // Chrome caps a manifest description at 132 characters.
     description: site.description.slice(0, 132),
     permissions: ["storage"],
+    // Firefox installs an unsigned add-on persistently and updates a signed one only under a stable id, and since late 2025 wants every new add-on to declare what it collects (nothing, here). Chrome would flag the key as unrecognized, so only the Firefox build carries it.
+    ...(browser === "firefox"
+      ? {
+          browser_specific_settings: {
+            gecko: {
+              data_collection_permissions: { required: ["none"] },
+              id: "rate-my-ott@nrjdalal.com",
+              strict_min_version: "128.0",
+            },
+          },
+        }
+      : {}),
     // The background fetches the API under a host permission, which is what lets an extension call a cross-origin API without CORS; a content script has only the page's permissions, so it never fetches itself. A dev build also covers the fixed-port and portless hosts, so the options page can point at either without a rebuild.
     host_permissions: [
       `${apiOrigin}/*`,

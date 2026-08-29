@@ -32,8 +32,9 @@ export type ImdbBasics = {
 }
 export type ImdbRating = { id: string; rating: number; votes: number }
 
-// A row of the index, and what the sync job writes: the basics joined with the rating.
+// A row of the index, and what the sync job writes: the basics joined with the rating. As a candidate for a query, `aka` says the name that matched is an alternate one rather than the title's own.
 export type ImdbTitle = {
+  aka?: boolean
   endYear: number | null
   id: string
   originalTitle: string
@@ -84,6 +85,60 @@ export function parseRatingsLine(line: string): ImdbRating | null {
 
 // The votes a short or a straight-to-video release needs to earn a row: IMDb lists a quarter of a million rated shorts, almost all with a handful of votes, and the few that reach a Netflix card are well known.
 export const MINOR_KIND_MIN_VOTES = 100
+
+// One row of title.akas.tsv: a spelling a title goes by somewhere, with where and what kind.
+export type ImdbAka = {
+  attributes: string | null
+  id: string
+  isOriginal: boolean
+  region: string | null
+  title: string
+  types: string | null
+}
+
+export function parseAkasLine(line: string): ImdbAka | null {
+  const cols = line.split("\t")
+  const id = cols[0]
+  if (cols.length < 8 || !id || !id.startsWith("tt")) return null
+  const title = text(cols[2])
+  if (title === null) return null
+  return {
+    attributes: text(cols[6]),
+    id,
+    isOriginal: cols[7] === "1",
+    region: text(cols[3]),
+    title,
+    types: text(cols[5]),
+  }
+}
+
+// The alternate spellings worth indexing, and for which titles. A well-known title (this many votes) is the one a platform shows under a name IMDb does not lead with ("Dune" for "Dune: Part One", "Marvel's Daredevil" for "Daredevil"), and only the names IMDb displays in English-speaking regions or worldwide count, of a stated type or of the two harmless attribute-only kinds: a row with no type is otherwise an alias ("fake working title", "third season title", "cut version", "informal title"), and those, like a festival title or a spelling for another market, name a stranger as easily as the title. IMDb joins several types with \x02.
+export const AKA_MIN_VOTES = 1000
+const AKA_REGIONS = new Set(["AU", "CA", "GB", "IE", "IN", "NZ", "US", "XWW"])
+const AKA_TYPES = new Set(["alternative", "imdbDisplay", "original"])
+const TYPE_SEPARATOR = String.fromCharCode(2)
+// "Marvel's Daredevil" is Daredevil's US "complete title"; a spelling variant names the same title too.
+const AKA_ATTRIBUTES = new Set(["alternative spelling", "complete title"])
+
+export const keepAka = (aka: ImdbAka): boolean =>
+  (aka.isOriginal || (aka.region !== null && AKA_REGIONS.has(aka.region))) &&
+  (aka.types === null
+    ? aka.attributes !== null && AKA_ATTRIBUTES.has(aka.attributes)
+    : aka.types
+        .split(",")
+        .flatMap((type) => type.split(TYPE_SEPARATOR))
+        .some((type) => AKA_TYPES.has(type)))
+
+// The spellings of every kept title, filled from the basics (its own names) and then from the alternate names; an alternate name a title already answers to under its own name is nothing new, and is left as an own name.
+export type Spellings = Map<string, { akas: string[]; own: string[] }>
+
+export const addAka = (spellings: Spellings, aka: ImdbAka): boolean => {
+  const known = spellings.get(aka.id)
+  const key = searchKey(aka.title)
+  if (!known || !key || known.own.includes(key) || known.akas.includes(key)) return false
+  known.akas.push(key)
+  return true
+}
 
 // Whether a title earns a row: a kind the index keeps, not adult, named, and either rated already or recent enough (this year or last) to be rated soon; a short or a video only once it is known. An old title nobody has voted on is never behind a card, and leaving it out keeps the table small.
 export const keepTitle = (basics: ImdbBasics, rating: ImdbRating | null, year: number): boolean => {
@@ -181,7 +236,7 @@ export function fitsQuery(
   return true
 }
 
-// Among the candidates that fit, the one the platform meant, or null when that is not certain: no answer beats a wrong one. Nothing is taken without a stated year. Once any candidate can be checked against what was stated (a known year, a known runtime for a film when one was stated), the ones that cannot drop out, and they still veto the pick when one of them is far more popular. One left is the answer. Several of both kinds with no kind stated are an ambiguity. Several rank by closest runtime (a film, when one was stated), then votes, and the best is taken only when something separates it from the runner-up: a runtime closer by a clear margin, or votes that dominate, which is denied under a loose spelling and whenever a candidate in the running is too new to have earned its votes (unrated, or under the floor and from this year or last): that one is as likely the platform's as the popular twin.
+// Among the candidates that fit, the one the platform meant, or null when that is not certain: no answer beats a wrong one. Nothing is taken without a stated year. A candidate that fits under its own name outranks the ones that fit only under an alternate name, which are taken only when one alone fits. Once any candidate can be checked against what was stated (a known year, a known runtime for a film when one was stated), the ones that cannot drop out, and they still veto the pick when one of them is far more popular. One left is the answer. Several of both kinds with no kind stated are an ambiguity. Several rank by closest runtime (a film, when one was stated), then votes, and the best is taken only when something separates it from the runner-up: a runtime closer by a clear margin, or votes that dominate, which is denied under a loose spelling and whenever a candidate in the running is too new to have earned its votes (unrated, or under the floor and from this year or last): that one is as likely the platform's as the popular twin.
 export function pickImdbTitle(
   candidates: ImdbTitle[],
   query: TitleQuery,
@@ -189,15 +244,18 @@ export function pickImdbTitle(
 ): ImdbTitle | null {
   if (!query.year) return null
   const now = options.now ?? new Date().getUTCFullYear()
-  const fitting = candidates.filter((candidate) => fitsQuery(candidate, query, options))
+  const fits = candidates.filter((candidate) => fitsQuery(candidate, query, options))
   const runtime = query.runtime
   const checksRuntime = (title: ImdbTitle) =>
     runtime !== undefined && imdbType(title.titleType) === "movie"
   const verified = (title: ImdbTitle) =>
     (!query.year || title.startYear !== null) && (!checksRuntime(title) || title.runtime !== null)
-  const verifiable = fitting.filter(verified)
-  const pool = verifiable.length > 0 ? verifiable : fitting
-  const dropped = fitting.filter((title) => !pool.includes(title))
+  // What the statements could verify comes first, then, among those, a title that fits under its own name outranks the ones that fit only under an alternate name, which are taken only alone: an alternate name is a name a title merely answers to somewhere, and popularity says nothing about which title the platform showed under it. Verification first, or a fan video carrying a famous film's name as its original title (no runtime on record) would outrank the film itself.
+  const verifiable = fits.filter(verified)
+  const checked = verifiable.length > 0 ? verifiable : fits
+  const own = checked.filter((candidate) => !candidate.aka)
+  const pool = own.length > 0 ? own : checked.length === 1 ? checked : []
+  const dropped = fits.filter((title) => !pool.includes(title))
   if (pool.length === 0) return null
   const gap = (title: ImdbTitle) =>
     !checksRuntime(title) || title.runtime === null ? Infinity : Math.abs(title.runtime - runtime!)
@@ -206,7 +264,11 @@ export function pickImdbTitle(
     return byGap !== 0 ? byGap : votesOf(b) - votesOf(a)
   })
   const top = ranked[0] as ImdbTitle
-  if (dropped.some((title) => votesOf(title) >= VOTES_DOMINANCE * votesOf(top))) return null
+  // A candidate left out still vetoes a pick it out-votes three to one; one left out for fitting only under an alternate name vetoes only a pick nobody has heard of, or Doctor Who's fake working title would silence Torchwood.
+  const vetoes = (title: ImdbTitle) =>
+    votesOf(title) >= VOTES_DOMINANCE * votesOf(top) &&
+    (!title.aka || votesOf(top) < OPEN_RUN_MIN_VOTES)
+  if (dropped.some(vetoes)) return null
   if (ranked.length === 1) return top
   if (!query.type && new Set(pool.map((title) => imdbType(title.titleType))).size > 1) return null
   const next = ranked[1] as ImdbTitle

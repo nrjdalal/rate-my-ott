@@ -1,5 +1,6 @@
 import type { Rating, TitleQuery } from "@/utils/api"
 import { compactCount, oneDecimal } from "@/utils/format"
+import { sameTitle } from "@/utils/netflix-props"
 
 // Everything that reads or writes Netflix's DOM, as pure functions over the nodes they are handed (no globals, no extension APIs), so tests/extension/wxt/utils/netflix.test.ts can drive them with a fixture in happy-dom.
 
@@ -16,11 +17,14 @@ export type CardInfo = {
 // The attribute the MAIN-world script sets once it has read a card's fiber; data-rmo-year and data-rmo-type sit beside it when the page named them.
 export const STAMP = "data-rmo-meta"
 
-// Every lockup a badge goes on. Netflix's current browse UI renders a card as one anchor labelled with the title and linking to /browse?jbv=<id>: standard-card (rows), ranked-card (Top 10), progress-card (Continue Watching); any other labelled jbv link is a card too. The legacy .title-card markup stays beside them for pages that still render it.
+// Every lockup a badge goes on. Netflix's current browse UI renders a card as one anchor labelled with the title and linking to /browse?jbv=<id>: standard-card (rows), ranked-card (Top 10), progress-card (Continue Watching); any other labelled jbv link is a card too. The modal's "More Like This" cards are labelled divs with no link (their id comes from the stamp). The legacy .title-card markup stays beside them for pages that still render it.
 export const CARD_SELECTOR =
-  "a[data-uia='standard-card'], a[data-uia='ranked-card'], a[data-uia='progress-card'], a[aria-label][href*='jbv='], .title-card, [data-uia='title-card']"
+  "a[data-uia='standard-card'], a[data-uia='ranked-card'], a[data-uia='progress-card'], a[aria-label][href*='jbv='], [data-uia='titleCard--container'][aria-label], .title-card, [data-uia='title-card']"
 
-// The hover and detail modals share one container class; the detail one adds `detail-modal`.
+// The hero at the top of a browse page; its rating joins the metadata line under the logo.
+export const BILLBOARD_SELECTOR = "[data-uia='billboard']"
+
+// The hover and detail modals share one container class; the detail one adds `detail-modal`, the hover one `mini-modal`.
 export const MODAL_SELECTOR = ".previewModal--container"
 
 const BADGE = "rmo-badge"
@@ -31,26 +35,35 @@ export const findCards = (root: ParentNode): Element[] => [...root.querySelector
 const text = (node: Element | null | undefined): string | undefined =>
   node?.textContent?.replace(/\s+/g, " ").trim() || undefined
 
-// The title as Netflix labels it for screen readers first (the card anchor's aria-label; the card is the anchor in the current UI), then the fallback text the legacy card renders under artwork that failed to load, then its title node; a card with none of them (a logo-only promo) is skipped. The Netflix video id in the href (jbv= today, /watch/ or /title/ before) is the card's identity, since the same title can appear in several rows.
+// The title as Netflix labels it for screen readers first (the card's own aria-label: the card is the anchor in the current UI, a labelled div in the modal's "More Like This" row; the legacy card labels its inner anchor), then the fallback text the legacy card renders under artwork that failed to load, then its title node; a card with none of them (a logo-only promo) is skipped. The Netflix video id in the href (jbv= today, /watch/ or /title/ before) is the card's identity, since the same title can appear in several rows.
 export function readCard(card: Element): CardInfo | null {
   const anchor = card.matches("a[href]")
     ? (card as HTMLAnchorElement)
     : (card.querySelector<HTMLAnchorElement>("a.slider-refocus") ??
       card.querySelector<HTMLAnchorElement>("a[href]"))
   const title =
+    card.getAttribute("aria-label")?.trim() ||
     anchor?.getAttribute("aria-label")?.trim() ||
     text(card.querySelector(".fallback-text")) ||
     text(card.querySelector("[data-uia='title-card-title']"))
   if (!title) return null
   const href = anchor?.getAttribute("href") ?? ""
   const match = href.match(/(?:\/watch\/|\/title\/|[?&]jbv=)(\d+)/)
-  const stamped = card.hasAttribute(STAMP)
+  // A stamp counts only while it names this card: React recycles a card element for another title, and the MAIN-world script re-stamps it on its next scan.
+  const stampedId = card.getAttribute("data-rmo-id")
+  const stampedTitle = card.getAttribute("data-rmo-title")
+  // A linked card is known by its id, a link-less one by its label, the same way the MAIN-world script decides whether to re-stamp it.
+  const stamped =
+    card.hasAttribute(STAMP) &&
+    (match
+      ? stampedId === null || stampedId === match[1]
+      : stampedTitle === null || sameTitle(stampedTitle, title))
   return {
-    id: match ? (match[1] as string) : title,
-    // Any card the page identifies (a jbv or /watch/ link) gets a stamp from its React props; only a bare label has nothing to wait for.
-    pending: !stamped && match !== null,
+    id: (stamped && stampedId) || (match ? (match[1] as string) : title),
+    // Any card the page identifies (a jbv or /watch/ link, or a labelled modal card) gets a stamp from its React props; only a bare label has nothing to wait for.
+    pending: !stamped && (match !== null || card.matches("[data-uia='titleCard--container']")),
     title,
-    ...stampedMeta(card),
+    ...(stamped ? stampedMeta(card) : {}),
   }
 }
 
@@ -69,12 +82,20 @@ export function stampedMeta(card: Element): {
 
 // Where the badge sits: the artwork box, so an absolutely placed badge lands on the art rather than in the card's flow. The legacy card names it (.boxart-container); the current card is an anchor whose artwork is an <img> in a plain wrapper div, which is the box there (a ranked card puts its rank numeral in a sibling div, so the wrapper, not the anchor, keeps the badge on the art). The card itself when there is no artwork at all.
 export const badgeHost = (card: Element): HTMLElement =>
-  card.querySelector<HTMLElement>(".boxart-container, .boxart-size-16x9, .boxart-size-7x10") ??
+  card.querySelector<HTMLElement>(
+    ".boxart-container, .boxart-size-16x9, .boxart-size-7x10, .titleCard-imageWrapper",
+  ) ??
   card.querySelector("img")?.parentElement ??
   (card as HTMLElement)
 
-export const hasBadge = (card: Element): boolean =>
-  badgeHost(card).querySelector(`:scope > .${BADGE}`) !== null
+// Every painted score carries the key of the query it answers (data-rmo-for), so a card React recycled for another title, or the billboard a route change reused, is painted again rather than kept.
+export const FOR = "data-rmo-for"
+
+const painted = (node: Element | null, key: string): boolean =>
+  node !== null && node.getAttribute(FOR) === key
+
+export const hasBadge = (card: Element, key = ""): boolean =>
+  painted(badgeHost(card).querySelector(`:scope > .${BADGE}`), key)
 
 // A positioned host keeps the badge on the art; only a static one is touched, and only with a class, so Netflix's own positioning is never overridden.
 function ensurePositioned(host: HTMLElement): void {
@@ -104,20 +125,23 @@ function scores(doc: Document, rating: Rating): HTMLElement[] {
 }
 
 // Idempotent: the card ends with exactly one badge (or none), whatever it had before.
-export function renderBadge(card: Element, rating: Rating | null): void {
+export function renderBadge(card: Element, rating: Rating | null, key = ""): void {
   const host = badgeHost(card)
   host.querySelector(`:scope > .${BADGE}`)?.remove()
   if (!rating || !rating.found) return
   const parts = scores(host.ownerDocument, rating)
   if (parts.length === 0) return
   const badge = host.ownerDocument.createElement("span")
-  badge.className = BADGE
+  badge.setAttribute(FOR, key)
+  // Netflix's own duration label sits top-right on the modal's cards; the badge takes the other corner there.
+  badge.className = host.querySelector(".duration") ? `${BADGE} ${BADGE}--left` : BADGE
   badge.append(...parts)
   ensurePositioned(host)
   host.append(badge)
 }
 
-export type ModalInfo = { anchor: HTMLElement; query: TitleQuery }
+// Where a modal's rating goes: the detail modal's details column as an "IMDb:" row, the hover modal's metadata line as an item beside the duration.
+export type ModalInfo = { anchor: HTMLElement; kind: "details" | "line"; query: TitleQuery }
 
 // The title the open modal is about. Netflix renders titles as artwork, so it is read from where the page still spells it out: the ?jbv=<id> the modal puts in the URL names the card it opened from, whose aria-label is the title; failing that, the modal's own boxart or story art carries it as alt text, and the legacy logo image did too.
 // The card the open modal came from: the ?jbv=<id> in the URL names it.
@@ -136,20 +160,23 @@ function modalTitle(root: ParentNode, modal: HTMLElement): string | undefined {
     "img.previewModal--boxart[alt], img[class*='storyArt'][alt], img.previewModal--player-titleTreatment-logo[alt], [data-uia='title-treatment'] img[alt], .title-logo img[alt]",
   )
   return (
+    modal.getAttribute("data-rmo-title")?.trim() ||
     card?.getAttribute("aria-label")?.trim() ||
     art?.getAttribute("alt")?.trim() ||
     text(modal.querySelector("[data-uia='video-title']"))
   )
 }
 
-// The open title modal, if any, with its title and the year and kind its metadata row states, which is what lets the lookup disambiguate a remake. The anchor is the details column the rating row joins; a modal without one (the hover preview) gets no row, the card's badge already says it.
+// The open title modal, if any, with its title and the year and kind its stamp or metadata row states, which is what lets the lookup disambiguate a remake. The anchor is the details column (the detail modal) or the metadata line (the hover preview, which has no details) the rating joins.
 export function readModal(root: ParentNode): ModalInfo | null {
   const modal = root.querySelector<HTMLElement>(MODAL_SELECTOR)
   if (!modal) return null
   const title = modalTitle(root, modal)
   if (!title) return null
   const details = modal.querySelector<HTMLElement>(".previewModal--detailsMetadata-right")
-  if (!details) return null
+  const line = modal.querySelector<HTMLElement>(".videoMetadata--line")
+  const anchor = details ?? line
+  if (!anchor) return null
   const parsedYear = Number(text(modal.querySelector(".year"))?.match(/\d{4}/)?.[0]) || undefined
   const duration = text(modal.querySelector(".duration")) ?? ""
   // "6 Episodes", "3 Seasons", or "Limited Series" for a show; "2h 33m" for a film.
@@ -158,13 +185,18 @@ export function readModal(root: ParentNode): ModalInfo | null {
     : /\d+\s*h|\d+\s*m/i.test(duration)
       ? ("movie" as const)
       : undefined
-  // The card the modal opened from carries the page's own year and kind once stamped; the modal's metadata text is the fallback.
-  const stamped = stampedMeta(modalCard(root) ?? modal)
+  // The modal's own stamp names the page's year and kind when its props carry them (the hover preview's do not, only its id and title); the card it opened from or hovers over, found by the jbv in the URL or by the same stamped id, is the next source, and the modal's metadata text the last.
+  const own = stampedMeta(modal)
+  const id = modal.getAttribute("data-rmo-id")
+  const twin = id ? root.querySelector(`[data-rmo-id="${id}"]:not(${MODAL_SELECTOR})`) : null
+  const fromCard = stampedMeta(modalCard(root) ?? twin ?? modal)
+  const stamped = { ...fromCard, ...own }
   const year = stamped.year ?? parsedYear
   const type = stamped.type ?? parsedType
   const runtime = stamped.runtime
   return {
-    anchor: details,
+    anchor,
+    kind: details ? "details" : "line",
     query: {
       title,
       ...(runtime ? { runtime } : {}),
@@ -174,16 +206,29 @@ export function readModal(root: ParentNode): ModalInfo | null {
   }
 }
 
-export const hasPanel = (anchor: HTMLElement): boolean =>
-  anchor.querySelector(`:scope > .${PANEL}`) !== null
+export const hasPanel = (anchor: HTMLElement, key = ""): boolean =>
+  painted(anchor.querySelector(`:scope > .${PANEL}`), key)
 
-// The modal's rating, as one more row of its details column ("Cast:", "Genres:", "This Movie Is:"): Netflix's own row classes, so it reads as Netflix's, with the score and vote count linking to the IMDb page. Nothing at all for a miss or a title nobody has rated yet. Idempotent like the badge.
-export function renderPanel(anchor: HTMLElement, rating: Rating | null): void {
+// The modal's rating, as one more row of its details column ("Cast:", "Genres:", "This Movie Is:"): Netflix's own row classes, so it reads as Netflix's, with the score and vote count linking to the IMDb page. On the hover preview's metadata line instead, one more item cloned from the duration ("2h 20m  IMDb 5.4"). Nothing at all for a miss or a title nobody has rated yet. Idempotent like the badge.
+export function renderPanel(anchor: HTMLElement, rating: Rating | null, key = ""): void {
   const doc = anchor.ownerDocument
   anchor.querySelector(`:scope > .${PANEL}`)?.remove()
   if (!rating || !rating.found || rating.imdbRating === null) return
+  if (anchor.classList.contains("videoMetadata--line")) {
+    // Cloned from the duration when there is one; a plain span otherwise, never the HD badge or the maturity box that end the line.
+    const duration = anchor.querySelector(".duration")
+    const item = duration ? (duration.cloneNode(false) as HTMLElement) : doc.createElement("span")
+    item.classList.add(PANEL)
+    item.setAttribute(FOR, key)
+    item.textContent = `IMDb ${oneDecimal(rating.imdbRating)}`
+    if (rating.imdbVotes !== null)
+      item.setAttribute("title", `${compactCount(rating.imdbVotes)} votes on IMDb`)
+    anchor.append(item)
+    return
+  }
   const row = doc.createElement("div")
   row.className = `previewModal--tags ${PANEL}`
+  row.setAttribute(FOR, key)
   const label = doc.createElement("span")
   label.className = "previewModal--tags-label"
   label.textContent = "IMDb:"
@@ -206,6 +251,54 @@ export function renderPanel(anchor: HTMLElement, rating: Rating | null): void {
   }
   row.append(label, item)
   anchor.append(row)
+}
+
+export type BillboardInfo = { anchor: HTMLElement; query: TitleQuery }
+
+// The stamped billboard, if any: the title, year, and kind the MAIN-world script read from its props (the title is artwork in the markup), and the metadata line ("Series • Drama • 2011 • 11 Seasons • A") its rating joins.
+export function readBillboard(root: ParentNode): BillboardInfo | null {
+  const section = root.querySelector<HTMLElement>(`${BILLBOARD_SELECTOR}[${STAMP}]`)
+  const title = section?.getAttribute("data-rmo-title")?.trim()
+  const line = section?.querySelector<HTMLElement>("[data-uia='attributes-elements']")
+  if (!section || !title || !line) return null
+  const meta = stampedMeta(section)
+  return {
+    anchor: line,
+    query: {
+      title,
+      ...(meta.runtime ? { runtime: meta.runtime } : {}),
+      ...(meta.type ? { type: meta.type } : {}),
+      ...(meta.year ? { year: meta.year } : {}),
+    },
+  }
+}
+
+export const hasBillboardRating = (anchor: HTMLElement, key = ""): boolean =>
+  painted(anchor.querySelector(`:scope > .${PANEL}`), key)
+
+// The billboard's rating as two more items of its metadata line, cloned from the line's own separator and item so they read as Netflix's: "• IMDb 8.5". Nothing for a miss. Idempotent like the badge.
+export function renderBillboardRating(anchor: HTMLElement, rating: Rating | null, key = ""): void {
+  for (const node of anchor.querySelectorAll(`:scope > .${PANEL}`)) node.remove()
+  if (!rating || !rating.found || rating.imdbRating === null) return
+  // Cloned from the first item (the "Series" or "Film" label), not the last: the line ends with the maturity rating, whose box is not the look wanted. A clone keeps no id or data-uia, which name Netflix's own nodes.
+  const items = [...anchor.children]
+  const separator = items.find((node) => node.getAttribute("aria-hidden") === "true")
+  const item = items.find((node) => node.getAttribute("aria-hidden") !== "true")
+  if (!item) return
+  const dot = (separator ?? item).cloneNode(true) as HTMLElement
+  const score = item.cloneNode(false) as HTMLElement
+  for (const node of [dot, score]) {
+    node.removeAttribute("id")
+    node.removeAttribute("data-uia")
+    node.classList.add(PANEL)
+    node.setAttribute(FOR, key)
+  }
+  score.textContent = `IMDb ${oneDecimal(rating.imdbRating)}`
+  score.setAttribute(
+    "title",
+    rating.imdbVotes !== null ? `${compactCount(rating.imdbVotes)} votes on IMDb` : "IMDb",
+  )
+  anchor.append(dot, score)
 }
 
 export function removeAll(root: ParentNode): void {

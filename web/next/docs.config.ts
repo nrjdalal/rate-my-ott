@@ -17,8 +17,16 @@ const docsConfig: DocsConfig = {
         "/docs/getting-started/install": {
           title: "Install the extension",
           description:
-            "Run the stack, build the IMDb index, load the extension into Chrome, and point it at the API.",
+            "Download the zip, load it into your browser, open Netflix. Nothing to run, nothing to configure.",
           label: "Install",
+        },
+      },
+      {
+        "/docs/getting-started/development": {
+          title: "Run the stack",
+          description:
+            "Run the API, the site, and a live-reloading extension build locally, with your own IMDb index.",
+          label: "Development",
         },
       },
       {
@@ -27,6 +35,14 @@ const docsConfig: DocsConfig = {
           description:
             "What the extension calls: one batch endpoint over the IMDb index, IMDb's daily datasets in Postgres.",
           label: "Ratings API",
+        },
+      },
+    ],
+    Project: [
+      {
+        "/docs/privacy": {
+          title: "Privacy",
+          description: "What the extension sends, what the API keeps, and what neither does.",
         },
       },
     ],
