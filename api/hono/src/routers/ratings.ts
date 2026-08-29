@@ -23,11 +23,15 @@ const batchSchema = z.object({
   titles: z.array(titleQuerySchema).min(1).max(MAX_TITLES),
 })
 
+// metascore, poster, and rottenTomatoes are always null: the v0.0.1 extension reads them and would paint "undefined" were they missing. Drop them in the next minor.
 const ratingSchema = z.object({
   found: z.boolean().meta({ example: true }),
   imdbId: z.string().nullable().meta({ example: "tt2861424" }),
   imdbRating: z.number().nullable().meta({ example: 9.1 }),
   imdbVotes: z.number().nullable().meta({ example: 640000 }),
+  metascore: z.null(),
+  poster: z.null(),
+  rottenTomatoes: z.null(),
   title: z.string().meta({ example: "Rick and Morty" }),
   type: z.enum(["movie", "series", "unknown"]).meta({ example: "series" }),
   year: z.number().nullable().meta({ example: 2013 }),
@@ -39,6 +43,9 @@ const asResponse = (row: Rating) => ({
   imdbId: row.imdbId,
   imdbRating: row.imdbRating,
   imdbVotes: row.imdbVotes,
+  metascore: null,
+  poster: null,
+  rottenTomatoes: null,
   title: row.title,
   type: row.type,
   year: row.year,
@@ -56,7 +63,7 @@ export const ratingsRouter = new Hono()
     describeRoute({
       tags: ["Ratings"],
       description:
-        "The IMDb rating for one title, matched in the IMDb index (IMDb's daily datasets) by name, kind, year, and runtime. A title the index cannot match with certainty comes back with found=false: no answer rather than a wrong one.",
+        "The IMDb rating for one title, matched in the IMDb index (IMDb's daily datasets) by name, kind, year, and runtime; a year is required for a match. A title the index cannot match with certainty comes back with found=false: no answer rather than a wrong one.",
       ...({
         "x-codeSamples": [
           {
@@ -65,7 +72,7 @@ export const ratingsRouter = new Hono()
             source: `import { apiClient, unwrap } from "@/lib/api/client"
 
 const { data, error } = await unwrap(
-  apiClient.v1.ratings.$get({ query: { title: "Rick and Morty", type: "series" } }),
+  apiClient.v1.ratings.$get({ query: { title: "Rick and Morty", type: "series", year: 2013 } }),
 )`,
           },
         ],
@@ -103,7 +110,7 @@ const { data, error } = await unwrap(
 
 const { data, error } = await unwrap(
   apiClient.v1.ratings.$post({
-    json: { titles: [{ title: "Rick and Morty", type: "series" }, { title: "Ikka" }] },
+    json: { titles: [{ title: "Rick and Morty", type: "series", year: 2013 }, { title: "Ikka", year: 2026 }] },
   }),
 )`,
           },

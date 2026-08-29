@@ -1,6 +1,6 @@
 import { db, imdbName, imdbTitle } from "@packages/db"
 import { env } from "@packages/env/api-hono"
-import { and, count, eq, getTableColumns, inArray, or, sql } from "drizzle-orm"
+import { count, getTableColumns, inArray, sql } from "drizzle-orm"
 
 import {
   keepTitle,
@@ -23,12 +23,15 @@ const BATCH = 5000
 // Sanity bounds on the kept titles. A rebuild that would shrink the index by half or more means the download was truncated or the format changed, and nothing is pruned; over the ceiling the filter no longer holds the table under the free branch's 512 MB, and the job stops writing.
 const MAX_TITLES = 1_500_000
 
+const DOWNLOAD_TIMEOUT_MS = 20 * 60 * 1000
+
 const log = (message: string) => console.log(`[imdb-sync] ${message}`)
 const seconds = (since: number) => `${((performance.now() - since) / 1000).toFixed(1)}s`
 
 async function open(file: string): Promise<AsyncGenerator<string>> {
   const url = new URL(file, `${env.IMDB_DATASETS_URL.replace(/\/$/, "")}/`)
-  const response = await fetch(url)
+  // A stalled download must fail the job, not hold it to the workflow's limit; the largest file takes a minute or two.
+  const response = await fetch(url, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) })
   if (!response.ok || !response.body) throw new Error(`${url} answered ${response.status}`)
   return readGzipLines(response.body)
 }
@@ -77,15 +80,12 @@ async function flush(titles: ImdbTitle[], names: Name[]) {
   const existing = await db.select().from(imdbName).where(inArray(imdbName.titleId, ids))
   const stale = staleNames(existing, names)
   if (stale.length > 0) {
-    await db
-      .delete(imdbName)
-      .where(
-        or(
-          ...stale.map((name) =>
-            and(eq(imdbName.key, name.key), eq(imdbName.titleId, name.titleId)),
-          ),
-        ),
-      )
+    await db.delete(imdbName).where(
+      inArray(
+        sql`(${imdbName.key}, ${imdbName.titleId})`,
+        stale.map((name) => sql`(${name.key}, ${name.titleId})`),
+      ),
+    )
   }
 }
 

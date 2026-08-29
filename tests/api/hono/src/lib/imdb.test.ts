@@ -126,6 +126,7 @@ describe("keepTitle and names", () => {
     expect(keepTitle(basics({ startYear: 2025 }), null, NOW)).toBe(true)
     expect(keepTitle(basics({ startYear: 2024 }), null, NOW)).toBe(false)
     expect(keepTitle(basics({ startYear: null }), null, NOW)).toBe(false)
+    expect(keepTitle(basics({ startYear: 2030 }), null, NOW)).toBe(true)
     expect(keepTitle(basics({ startYear: 1994 }), rated, NOW)).toBe(true)
   })
 
@@ -230,6 +231,15 @@ describe("fitsQuery", () => {
     expect(fitsQuery(obscure, { title: "X", type: "series", year: 2006 }, { now: NOW })).toBe(true)
     const unrated = title({ endYear: null, startYear: 2025, titleType: "tvSeries", votes: null })
     expect(fitsQuery(unrated, { title: "X", type: "series", year: 2026 }, { now: NOW })).toBe(true)
+    const unratedOlder = title({
+      endYear: null,
+      startYear: 2024,
+      titleType: "tvSeries",
+      votes: null,
+    })
+    expect(fitsQuery(unratedOlder, { title: "X", type: "series", year: 2026 }, { now: NOW })).toBe(
+      false,
+    )
   })
 
   test("a runtime is only checked for a film, and an unknown field does not disqualify unless the year must be exact", () => {
@@ -249,73 +259,153 @@ describe("pickImdbTitle", () => {
   const hindi = title({ id: "tt1", runtime: 141, startYear: 2025, votes: 12000 })
   const french = title({ id: "tt2", runtime: 128, startYear: 2025, votes: 4000 })
   const wolf = title({ id: "tt3", runtime: 96, startYear: 2018, votes: 90000 })
+  const at = { now: NOW }
 
-  test("nothing is taken on a name alone; one fitting candidate is the answer; none is a miss", () => {
-    expect(pickImdbTitle([wolf], { title: "Alpha" })).toBeNull()
-    expect(pickImdbTitle([hindi, wolf], { title: "Alpha", type: "movie", year: 2026 })).toBe(hindi)
-    expect(pickImdbTitle([wolf], { title: "Alpha", type: "movie", year: 2026 })).toBeNull()
-    expect(pickImdbTitle([wolf], { title: "Alpha", type: "movie" })).toBe(wolf)
-    expect(pickImdbTitle([], { title: "Alpha", year: 2026 })).toBeNull()
+  test("nothing is taken without a year; one fitting candidate is the answer; none is a miss", () => {
+    expect(pickImdbTitle([wolf], { title: "Alpha" }, at)).toBeNull()
+    expect(pickImdbTitle([wolf], { title: "Alpha", type: "movie" }, at)).toBeNull()
+    expect(pickImdbTitle([wolf], { runtime: 96, title: "Alpha", type: "movie" }, at)).toBeNull()
+    expect(pickImdbTitle([hindi, wolf], { title: "Alpha", type: "movie", year: 2026 }, at)).toBe(
+      hindi,
+    )
+    expect(pickImdbTitle([wolf], { title: "Alpha", type: "movie", year: 2026 }, at)).toBeNull()
+    expect(pickImdbTitle([wolf], { title: "Alpha", year: 2018 }, at)).toBe(wolf)
+    expect(pickImdbTitle([], { title: "Alpha", year: 2026 }, at)).toBeNull()
+  })
+
+  test("a film and a series of one name, with no kind stated, are an ambiguity", () => {
+    const film = title({ id: "tt21", runtime: null, startYear: 2020, votes: 12000 })
+    const show = title({
+      id: "tt22",
+      runtime: null,
+      startYear: 2020,
+      titleType: "tvSeries",
+      votes: 1000,
+    })
+    expect(pickImdbTitle([film, show], { title: "X", year: 2020 }, at)).toBeNull()
+    expect(pickImdbTitle([film, show], { title: "X", type: "movie", year: 2020 }, at)).toBe(film)
+    expect(pickImdbTitle([film, show], { title: "X", type: "series", year: 2020 }, at)).toBe(show)
   })
 
   test("a clearly closer runtime separates same-year films; a minute does not", () => {
     expect(
-      pickImdbTitle([french, hindi, wolf], {
-        runtime: 140,
-        title: "Alpha",
-        type: "movie",
-        year: 2026,
-      }),
+      pickImdbTitle(
+        [french, hindi, wolf],
+        { runtime: 140, title: "Alpha", type: "movie", year: 2026 },
+        at,
+      ),
     ).toBe(hindi)
     expect(
-      pickImdbTitle([hindi, french], { runtime: 130, title: "Alpha", type: "movie", year: 2025 }),
+      pickImdbTitle(
+        [hindi, french],
+        { runtime: 130, title: "Alpha", type: "movie", year: 2025 },
+        at,
+      ),
     ).toBe(french)
-    const a = title({ id: "tt4", runtime: 100, votes: 50 })
-    const b = title({ id: "tt5", runtime: 100 + RUNTIME_MARGIN_MIN - 1, votes: 100000 })
+    const a = title({ id: "tt4", runtime: 100, startYear: 2020, votes: 500 })
+    const b = title({
+      id: "tt5",
+      runtime: 100 + RUNTIME_MARGIN_MIN - 1,
+      startYear: 2020,
+      votes: 100000,
+    })
     // Runtimes a minute apart do not decide; popularity does, and it favours b.
-    expect(pickImdbTitle([a, b], { runtime: 101, title: "Alpha", type: "movie", year: 2025 })).toBe(
-      b,
-    )
-    const c = title({ id: "tt6", runtime: 100 + RUNTIME_MARGIN_MIN, votes: 100000 })
-    expect(pickImdbTitle([a, c], { runtime: 100, title: "Alpha", type: "movie", year: 2025 })).toBe(
-      a,
-    )
+    expect(
+      pickImdbTitle([a, b], { runtime: 101, title: "Alpha", type: "movie", year: 2020 }, at),
+    ).toBe(b)
+    const c = title({
+      id: "tt6",
+      runtime: 100 + RUNTIME_MARGIN_MIN,
+      startYear: 2020,
+      votes: 100000,
+    })
+    expect(
+      pickImdbTitle([a, c], { runtime: 100, title: "Alpha", type: "movie", year: 2020 }, at),
+    ).toBe(a)
   })
 
   test("without a runtime, a stated year takes the dominant title and refuses a close call or an unrated twin", () => {
-    const popular = title({ id: "tt7", runtime: null, votes: 30000 })
-    const obscure = title({ id: "tt8", runtime: null, votes: 30000 / VOTES_DOMINANCE })
-    expect(pickImdbTitle([obscure, popular], { title: "Alpha", type: "movie", year: 2025 })).toBe(
-      popular,
-    )
-    const rival = title({ id: "tt9", runtime: null, votes: 20000 })
+    const popular = title({ id: "tt7", runtime: null, startYear: 2020, votes: 30000 })
+    const obscure = title({
+      id: "tt8",
+      runtime: null,
+      startYear: 2020,
+      votes: 30000 / VOTES_DOMINANCE,
+    })
     expect(
-      pickImdbTitle([rival, popular], { title: "Alpha", type: "movie", year: 2025 }),
+      pickImdbTitle([obscure, popular], { title: "Alpha", type: "movie", year: 2020 }, at),
+    ).toBe(popular)
+    const rival = title({ id: "tt9", runtime: null, startYear: 2020, votes: 20000 })
+    expect(
+      pickImdbTitle([rival, popular], { title: "Alpha", type: "movie", year: 2020 }, at),
     ).toBeNull()
     // The platform's own new film is the unrated one; showing the rated twin's score would be wrong.
-    const unrated = title({ id: "tt10", runtime: null, votes: null })
+    const unrated = title({ id: "tt10", runtime: null, startYear: 2020, votes: null })
     expect(
-      pickImdbTitle([unrated, popular], { title: "Alpha", type: "movie", year: 2025 }),
+      pickImdbTitle([unrated, popular], { title: "Alpha", type: "movie", year: 2020 }, at),
     ).toBeNull()
-    const few = title({ id: "tt11", runtime: null, votes: DOMINANT_MIN_VOTES - 1 })
-    const fewer = title({ id: "tt12", runtime: null, votes: 3 })
-    expect(pickImdbTitle([few, fewer], { title: "Alpha", type: "movie", year: 2025 })).toBeNull()
+    const few = title({ id: "tt11", runtime: null, startYear: 2020, votes: DOMINANT_MIN_VOTES - 1 })
+    const fewer = title({ id: "tt12", runtime: null, startYear: 2020, votes: 3 })
+    expect(
+      pickImdbTitle([few, fewer], { title: "Alpha", type: "movie", year: 2020 }, at),
+    ).toBeNull()
+  })
+
+  test("a title too new to have earned its votes denies dominance to a namesake", () => {
+    // Netflix's own new series with 60 votes against last year's unrelated namesake with 200.
+    const fresh = title({
+      id: "tt23",
+      runtime: null,
+      startYear: 2026,
+      titleType: "tvSeries",
+      votes: 60,
+    })
+    const namesake = title({
+      endYear: 2025,
+      id: "tt24",
+      runtime: null,
+      startYear: 2025,
+      titleType: "tvSeries",
+      votes: 200,
+    })
+    expect(
+      pickImdbTitle([namesake, fresh], { title: "Ikka", type: "series", year: 2026 }, at),
+    ).toBeNull()
+    // The same pair years ago: 60 votes is all that title will ever get, and 200 dominates it.
+    const old = title({
+      endYear: 2021,
+      id: "tt25",
+      runtime: null,
+      startYear: 2020,
+      titleType: "tvSeries",
+      votes: 60,
+    })
+    const known = title({
+      endYear: 2021,
+      id: "tt26",
+      runtime: null,
+      startYear: 2021,
+      titleType: "tvSeries",
+      votes: 200,
+    })
+    expect(pickImdbTitle([old, known], { title: "Ikka", type: "series", year: 2021 }, at)).toBe(
+      known,
+    )
   })
 
   test("a candidate the statements cannot verify drops out, but vetoes a far less popular pick", () => {
     const undated = title({ id: "tt13", runtime: null, startYear: null, votes: 500 })
-    expect(pickImdbTitle([undated, hindi], { title: "Alpha", type: "movie", year: 2025 })).toBe(
+    expect(pickImdbTitle([undated, hindi], { title: "Alpha", type: "movie", year: 2025 }, at)).toBe(
       hindi,
     )
     const famous = title({ id: "tt14", runtime: null, startYear: 2025, votes: 500000 })
     const measured = title({ id: "tt15", runtime: 138, startYear: 2024, votes: 20 })
     expect(
-      pickImdbTitle([famous, measured], {
-        runtime: 140,
-        title: "Alpha",
-        type: "movie",
-        year: 2025,
-      }),
+      pickImdbTitle(
+        [famous, measured],
+        { runtime: 140, title: "Alpha", type: "movie", year: 2025 },
+        at,
+      ),
     ).toBeNull()
   })
 
@@ -335,86 +425,79 @@ describe("pickImdbTitle", () => {
       votes: 100000,
     })
     expect(
-      pickImdbTitle([long, short], { runtime: 45, title: "X", type: "series", year: 2020 }),
+      pickImdbTitle([long, short], { runtime: 45, title: "X", type: "series", year: 2020 }, at),
     ).toBe(short)
-    const a = title({ id: "tt18", runtime: 100, votes: 10 })
-    const b = title({
-      id: "tt19",
-      runtime: null,
-      startYear: 2025,
-      titleType: "tvSeries",
-      votes: 10,
-    })
-    const c = title({ id: "tt20", runtime: 105, votes: 10 })
+    const a = title({ id: "tt18", runtime: 100, startYear: 2020, votes: 10 })
+    const b = title({ id: "tt19", runtime: null, startYear: 2020, votes: 10 })
+    const c = title({ id: "tt20", runtime: 105, startYear: 2020, votes: 10 })
     for (const order of [
       [a, b, c],
       [c, b, a],
       [b, a, c],
     ]) {
-      expect(pickImdbTitle(order, { runtime: 100, title: "X", year: 2025 })).toBe(a)
+      expect(
+        pickImdbTitle(order, { runtime: 100, title: "X", type: "movie", year: 2020 }, at),
+      ).toBe(a)
     }
   })
 
   test("the real Office: a namesake that started the stated year does not outrank the famous one", () => {
     const us = title({
-      id: "tt0386676",
       endYear: 2013,
+      id: "tt0386676",
       runtime: 22,
       startYear: 2005,
       titleType: "tvSeries",
       votes: 847167,
     })
     const namesake = title({
-      id: "tt2186395",
       endYear: null,
+      id: "tt2186395",
       runtime: null,
       startYear: 2012,
       titleType: "tvSeries",
       votes: 17,
     })
     const other = title({
-      id: "tt1791001",
       endYear: 2013,
+      id: "tt1791001",
       runtime: 30,
       startYear: 2010,
       titleType: "tvSeries",
       votes: 87,
     })
     expect(
-      pickImdbTitle(
-        [namesake, other, us],
-        { title: "The Office", type: "series", year: 2012 },
-        { now: NOW },
-      ),
+      pickImdbTitle([namesake, other, us], { title: "The Office", type: "series", year: 2012 }, at),
     ).toBe(us)
   })
 })
 
 describe("resolveTitle", () => {
   const office = title({
-    id: "tt0386676",
     endYear: 2013,
+    id: "tt0386676",
     runtime: 22,
     startYear: 2005,
     titleType: "tvSeries",
     votes: 847167,
   })
   const parent = title({
-    id: "tt10919420",
     endYear: null,
+    id: "tt10919420",
     runtime: 55,
     startYear: 2021,
     titleType: "tvSeries",
     votes: 774354,
   })
   const spinoff = title({
-    id: "tt24003330",
     endYear: null,
+    id: "tt24003330",
     runtime: 50,
     startYear: 2023,
     titleType: "tvSeries",
     votes: 30000,
   })
+  const hindiOf = () => title({ id: "tt28363783", runtime: 141, startYear: 2025, votes: 24000 })
   const index = new Map<string, ImdbTitle[]>([
     ["The Office", [office]],
     ["Squid Game", [parent]],
@@ -425,9 +508,6 @@ describe("resolveTitle", () => {
     ],
     ["Alpha", [hindiOf(), title({ id: "tt6194322", runtime: 96, startYear: 2018, votes: 90000 })]],
   ])
-  function hindiOf() {
-    return title({ id: "tt28363783", runtime: 141, startYear: 2025, votes: 24000 })
-  }
   const lookup = (spelling: string) => index.get(spelling) ?? []
 
   test("a parenthetical qualifier is dropped freely; a subtitle only for the stated year exactly", () => {
@@ -454,13 +534,45 @@ describe("resolveTitle", () => {
   test("an ambiguity under the platform's own spelling is final; a looser spelling is not tried", () => {
     expect(resolveTitle({ title: "Alpha", type: "movie" }, lookup, NOW)).toBeNull()
     expect(
-      resolveTitle({ title: "Alpha", runtime: 140, type: "movie", year: 2026 }, lookup, NOW)?.id,
+      resolveTitle({ runtime: 140, title: "Alpha", type: "movie", year: 2026 }, lookup, NOW)?.id,
     ).toBe("tt28363783")
     expect(
       resolveTitle({ title: "Alpha: Origins", type: "movie", year: 2026 }, lookup, NOW),
     ).toBeNull()
     expect(
       resolveTitle({ title: "Nothing Here", type: "movie", year: 2026 }, lookup, NOW),
+    ).toBeNull()
+    // Two same-year Alphas fit "Alpha: Origins" (2025) under the loose spelling; popularity must not pick one.
+    const alphas = new Map<string, ImdbTitle[]>([
+      [
+        "Alpha",
+        [hindiOf(), title({ id: "tt29000001", runtime: 128, startYear: 2025, votes: 4000 })],
+      ],
+    ])
+    const alphaLookup = (spelling: string) => alphas.get(spelling) ?? []
+    expect(
+      resolveTitle({ title: "Alpha: Origins", type: "movie", year: 2025 }, alphaLookup, NOW),
+    ).toBeNull()
+    expect(resolveTitle({ title: "Alpha", type: "movie", year: 2025 }, alphaLookup, NOW)?.id).toBe(
+      "tt28363783",
+    )
+    // An ambiguity under the exact spelling stays one even when a looser spelling would fit a single title.
+    const nested = new Map<string, ImdbTitle[]>([
+      [
+        "Dune: Part Two",
+        [
+          title({ id: "tt30", runtime: null, startYear: 2024, votes: 500 }),
+          title({ id: "tt31", runtime: null, startYear: 2024, votes: 400 }),
+        ],
+      ],
+      ["Dune", [title({ id: "tt32", runtime: null, startYear: 2024, votes: 90000 })]],
+    ])
+    expect(
+      resolveTitle(
+        { title: "Dune: Part Two", type: "movie", year: 2024 },
+        (s) => nested.get(s) ?? [],
+        NOW,
+      ),
     ).toBeNull()
   })
 })

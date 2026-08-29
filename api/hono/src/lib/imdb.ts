@@ -146,7 +146,7 @@ export type MatchOptions = {
 
 const votesOf = (title: ImdbTitle) => title.votes ?? 0
 
-// Whether a candidate can be the title the platform showed, given what the platform stated (the name already matches). The kind must agree. A film's year within a year of its release; a series when the stated year falls in its run, a year either side, since a platform states a show's latest season rather than its premiere; a run with no end year reaches the present only for a well-known show. A film's runtime within five minutes when both are known. A field the index lacks cannot be checked and does not disqualify here; pickImdbTitle drops such a candidate once another can be checked.
+// Whether a candidate can be the title the platform showed, given what the platform stated (the name already matches). The kind must agree. A film's year within a year of its release; a series when the stated year falls in its run, a year either side, since a platform states a show's latest season rather than its premiere; a run with no end year reaches the present only for a well-known show. A film's runtime within five minutes when both are known. A field the index lacks cannot be checked and does not disqualify here (except a missing year when the year must be exact); pickImdbTitle drops such a candidate once another can be checked.
 export function fitsQuery(
   title: ImdbTitle,
   query: TitleQuery,
@@ -181,13 +181,14 @@ export function fitsQuery(
   return true
 }
 
-// Among the candidates that fit, the one the platform meant, or null when that is not certain: no answer beats a wrong one. Nothing is taken on a name alone. Once any candidate can be checked against what was stated (a known year, a known runtime for a film when one was stated), the ones that cannot drop out, and they still veto the pick when one of them is far more popular. One left is the answer. Several rank by closest runtime (a film, when one was stated), then votes, and the best is taken only when something separates it from the runner-up: a runtime closer by a clear margin, or, with a stated year, votes that dominate, which an unrated candidate in the running (a title too new to have a score) always denies.
+// Among the candidates that fit, the one the platform meant, or null when that is not certain: no answer beats a wrong one. Nothing is taken without a stated year. Once any candidate can be checked against what was stated (a known year, a known runtime for a film when one was stated), the ones that cannot drop out, and they still veto the pick when one of them is far more popular. One left is the answer. Several of both kinds with no kind stated are an ambiguity. Several rank by closest runtime (a film, when one was stated), then votes, and the best is taken only when something separates it from the runner-up: a runtime closer by a clear margin, or votes that dominate, which is denied under a loose spelling and whenever a candidate in the running is too new to have earned its votes (unrated, or under the floor and from this year or last): that one is as likely the platform's as the popular twin.
 export function pickImdbTitle(
   candidates: ImdbTitle[],
   query: TitleQuery,
   options: MatchOptions = {},
 ): ImdbTitle | null {
-  if (!query.type && !query.year) return null
+  if (!query.year) return null
+  const now = options.now ?? new Date().getUTCFullYear()
   const fitting = candidates.filter((candidate) => fitsQuery(candidate, query, options))
   const runtime = query.runtime
   const checksRuntime = (title: ImdbTitle) =>
@@ -207,11 +208,15 @@ export function pickImdbTitle(
   const top = ranked[0] as ImdbTitle
   if (dropped.some((title) => votesOf(title) >= VOTES_DOMINANCE * votesOf(top))) return null
   if (ranked.length === 1) return top
+  if (!query.type && new Set(pool.map((title) => imdbType(title.titleType))).size > 1) return null
   const next = ranked[1] as ImdbTitle
   if (Number.isFinite(gap(top)) && gap(next) - gap(top) >= RUNTIME_MARGIN_MIN) return top
+  const tooNew = (title: ImdbTitle) =>
+    title.votes === null ||
+    (title.votes < DOMINANT_MIN_VOTES && (title.startYear ?? now) >= now - 1)
   if (
-    query.year &&
-    pool.every((title) => title.votes !== null) &&
+    !options.exactYear &&
+    !pool.some(tooNew) &&
     votesOf(top) >= DOMINANT_MIN_VOTES &&
     votesOf(top) >= VOTES_DOMINANCE * votesOf(next)
   ) {
