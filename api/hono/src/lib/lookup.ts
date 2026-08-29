@@ -8,6 +8,20 @@ export const MISSING_TTL_MS = 24 * 60 * 60 * 1000
 export const normalizeTitle = (value: string) =>
   value.normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase()
 
+// The spellings to try when the provider does not know a title as the platform writes it: as given, then without a parenthetical qualifier ("The Office (U.S.)"), then without a subtitle after a colon ("Grand Theft Auto VI: An Extended Look"). Each distinct variant is tried once, so a miss costs at most three provider calls, and only until the day-long miss cache covers it.
+export const titleVariants = (title: string): string[] => {
+  const variants: string[] = []
+  const add = (value: string) => {
+    const spelled = value.replace(/\s+/g, " ").trim()
+    if (spelled && !variants.includes(spelled)) variants.push(spelled)
+  }
+  add(title)
+  const unqualified = title.replace(/\s*\([^)]*\)/g, "")
+  add(unqualified)
+  add(unqualified.split(":")[0] as string)
+  return variants
+}
+
 export const ratingKey = (query: TitleQuery) =>
   `${normalizeTitle(query.title)}|${query.year ?? ""}|${query.type ?? ""}`
 

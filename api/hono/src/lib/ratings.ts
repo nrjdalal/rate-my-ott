@@ -3,7 +3,7 @@ import { env } from "@packages/env/api-hono"
 import { getTableColumns, inArray, sql } from "drizzle-orm"
 
 import { ApiError } from "@/lib/error"
-import { alignTo, isStale, mapLimit, uniqueQueries } from "@/lib/lookup"
+import { alignTo, isStale, mapLimit, titleVariants, uniqueQueries } from "@/lib/lookup"
 import {
   omdbSearchParams,
   parseOmdb,
@@ -17,8 +17,17 @@ export type Rating = typeof rating.$inferSelect
 // At most this many provider calls in flight for one request.
 const CONCURRENCY = 5
 
-// One provider call, or a 502/503 the envelope can carry: 503 when no key is configured (the rest of the API keeps working without one), 502 when OMDb is down or refuses the key. A miss is null.
+// The provider asked once per spelling the platform's title could go by, stopping at the first hit; a title unknown under every spelling is a miss.
 async function fetchProviderTitle(query: TitleQuery): Promise<ProviderTitle | null> {
+  for (const title of titleVariants(query.title)) {
+    const found = await fetchProviderOnce({ ...query, title })
+    if (found) return found
+  }
+  return null
+}
+
+// One provider call, or a 502/503 the envelope can carry: 503 when no key is configured (the rest of the API keeps working without one), 502 when OMDb is down or refuses the key. A miss is null.
+async function fetchProviderOnce(query: TitleQuery): Promise<ProviderTitle | null> {
   if (!env.OMDB_API_KEY) {
     throw new ApiError(503, "SERVICE_UNAVAILABLE", "Set OMDB_API_KEY to enable ratings lookups")
   }

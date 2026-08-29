@@ -8,6 +8,7 @@ import {
   MISSING_TTL_MS,
   normalizeTitle,
   ratingKey,
+  titleVariants,
   uniqueQueries,
 } from "../../../../../api/hono/src/lib/lookup"
 
@@ -17,6 +18,22 @@ describe("ratingKey", () => {
     expect(ratingKey({ title: "Rick and Morty" })).toBe("rick and morty||")
     expect(ratingKey({ title: "Dune", type: "movie", year: 2021 })).toBe("dune|2021|movie")
     expect(ratingKey({ title: "Ｄune" })).toBe(ratingKey({ title: "dune" }))
+  })
+})
+
+describe("titleVariants", () => {
+  test("tries the title as spelled, then without a parenthetical, then without a subtitle", () => {
+    expect(titleVariants("The Office (U.S.)")).toEqual(["The Office (U.S.)", "The Office"])
+    expect(titleVariants("Grand Theft Auto VI: An Extended Look")).toEqual([
+      "Grand Theft Auto VI: An Extended Look",
+      "Grand Theft Auto VI",
+    ])
+    expect(titleVariants("Shameless (U.S.): Season 1")).toEqual([
+      "Shameless (U.S.): Season 1",
+      "Shameless: Season 1",
+      "Shameless",
+    ])
+    expect(titleVariants("Ikka")).toEqual(["Ikka"])
   })
 })
 
