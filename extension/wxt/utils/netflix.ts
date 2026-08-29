@@ -3,7 +3,18 @@ import { compactCount, oneDecimal } from "@/utils/format"
 
 // Everything that reads or writes Netflix's DOM, as pure functions over the nodes they are handed (no globals, no extension APIs), so tests/extension/wxt/utils/netflix.test.ts can drive them with a fixture in happy-dom.
 
-export type CardInfo = { id: string; title: string }
+// A card as the scanner reads it. pending is a current card the MAIN-world script has not stamped yet (see netflix-entities.content.ts): its year and kind are on the way, and a lookup sent without them would match the wrong title and be cached for a week.
+export type CardInfo = {
+  id: string
+  pending: boolean
+  runtime?: number
+  title: string
+  type?: "movie" | "series"
+  year?: number
+}
+
+// The attribute the MAIN-world script sets once it has read a card's fiber; data-rmo-year and data-rmo-type sit beside it when the page named them.
+export const STAMP = "data-rmo-meta"
 
 export type DisplayOptions = { showMetascore: boolean; showRottenTomatoes: boolean }
 
@@ -35,7 +46,27 @@ export function readCard(card: Element): CardInfo | null {
   if (!title) return null
   const href = anchor?.getAttribute("href") ?? ""
   const match = href.match(/(?:\/watch\/|\/title\/|[?&]jbv=)(\d+)/)
-  return { id: match ? (match[1] as string) : title, title }
+  const stamped = card.hasAttribute(STAMP)
+  return {
+    id: match ? (match[1] as string) : title,
+    // Only a current (jbv) card has a stamp to wait for; the legacy markup never gets one.
+    pending: !stamped && /[?&]jbv=/.test(href),
+    title,
+    ...stampedMeta(card),
+  }
+}
+
+// The year, kind, and length the MAIN-world script stamped on a card, when it found them.
+export function stampedMeta(card: Element): {
+  runtime?: number
+  type?: "movie" | "series"
+  year?: number
+} {
+  const runtime = Number(card.getAttribute("data-rmo-runtime")) || undefined
+  const year = Number(card.getAttribute("data-rmo-year")) || undefined
+  const kind = card.getAttribute("data-rmo-type")
+  const type = kind === "movie" || kind === "series" ? kind : undefined
+  return { ...(runtime ? { runtime } : {}), ...(type ? { type } : {}), ...(year ? { year } : {}) }
 }
 
 // Where the badge sits: the artwork box, so an absolutely placed badge lands on the art rather than in the card's flow. The legacy card names it (.boxart-container); the current card is an anchor whose artwork is an <img> in a plain wrapper div, which is the box there (a ranked card puts its rank numeral in a sibling div, so the wrapper, not the anchor, keeps the badge on the art). The card itself when there is no artwork at all.
@@ -54,32 +85,30 @@ function ensurePositioned(host: HTMLElement): void {
   if (!position || position === "static") host.classList.add("rmo-host")
 }
 
-const chip = (doc: Document, mark: string, value: string, label: string): HTMLElement => {
+// One partition of the pill: the number alone, the platform said by its color and spelled out for assistive tech and the tooltip.
+const score = (doc: Document, className: string, value: string, label: string): HTMLElement => {
   const el = doc.createElement("span")
-  el.className = "rmo-badge__chip"
+  el.className = `rmo-score ${className}`
   el.setAttribute("aria-label", label)
-  const markEl = doc.createElement("span")
-  markEl.className = "rmo-badge__mark"
-  markEl.textContent = mark
-  el.append(markEl, value)
+  el.setAttribute("title", label)
+  el.textContent = value
   return el
 }
 
 // What a rating is worth showing as: the IMDb score first, then Rotten Tomatoes and Metacritic when the user wants them; nothing for a miss or a title with no scores, so no badge rather than an empty one.
-function chips(doc: Document, rating: Rating, options: DisplayOptions): HTMLElement[] {
+function scores(doc: Document, rating: Rating, options: DisplayOptions): HTMLElement[] {
   const out: HTMLElement[] = []
   if (rating.imdbRating !== null) {
-    out.push(
-      chip(doc, "IMDb", oneDecimal(rating.imdbRating), `IMDb ${oneDecimal(rating.imdbRating)}`),
-    )
+    const value = oneDecimal(rating.imdbRating)
+    out.push(score(doc, "rmo-score--imdb", value, `IMDb ${value}`))
   }
   if (options.showRottenTomatoes && rating.rottenTomatoes !== null) {
-    out.push(
-      chip(doc, "RT", `${rating.rottenTomatoes}%`, `Rotten Tomatoes ${rating.rottenTomatoes}%`),
-    )
+    const label = `Rotten Tomatoes ${rating.rottenTomatoes}%`
+    out.push(score(doc, "rmo-score--rt", String(rating.rottenTomatoes), label))
   }
   if (options.showMetascore && rating.metascore !== null) {
-    out.push(chip(doc, "MC", String(rating.metascore), `Metacritic ${rating.metascore}`))
+    const label = `Metacritic ${rating.metascore}`
+    out.push(score(doc, "rmo-score--mc", String(rating.metascore), label))
   }
   return out
 }
@@ -89,7 +118,7 @@ export function renderBadge(card: Element, rating: Rating | null, options: Displ
   const host = badgeHost(card)
   host.querySelector(`:scope > .${BADGE}`)?.remove()
   if (!rating || !rating.found) return
-  const parts = chips(host.ownerDocument, rating, options)
+  const parts = scores(host.ownerDocument, rating, options)
   if (parts.length === 0) return
   const badge = host.ownerDocument.createElement("span")
   badge.className = BADGE
@@ -101,13 +130,18 @@ export function renderBadge(card: Element, rating: Rating | null, options: Displ
 export type ModalInfo = { anchor: HTMLElement; query: TitleQuery }
 
 // The title the open modal is about. Netflix renders titles as artwork, so it is read from where the page still spells it out: the ?jbv=<id> the modal puts in the URL names the card it opened from, whose aria-label is the title; failing that, the modal's own boxart or story art carries it as alt text, and the legacy logo image did too.
-function modalTitle(root: ParentNode, modal: HTMLElement): string | undefined {
+// The card the open modal came from: the ?jbv=<id> in the URL names it.
+function modalCard(root: ParentNode): Element | null {
   // 9 is Node.DOCUMENT_NODE, spelled as a number because the DOM globals are not defined under bun test.
   const doc = root.nodeType === 9 ? (root as Document) : root.ownerDocument
   const jbv = doc?.defaultView
     ? new URL(doc.defaultView.location.href).searchParams.get("jbv")
     : null
-  const card = jbv ? doc?.querySelector(`a[aria-label][href*="jbv=${jbv}"]`) : null
+  return jbv ? (doc?.querySelector(`a[aria-label][href*="jbv=${jbv}"]`) ?? null) : null
+}
+
+function modalTitle(root: ParentNode, modal: HTMLElement): string | undefined {
+  const card = modalCard(root)
   const art = modal.querySelector<HTMLImageElement>(
     "img.previewModal--boxart[alt], img[class*='storyArt'][alt], img.previewModal--player-titleTreatment-logo[alt], [data-uia='title-treatment'] img[alt], .title-logo img[alt]",
   )
@@ -125,17 +159,27 @@ export function readModal(root: ParentNode): ModalInfo | null {
   const title = modalTitle(root, modal)
   if (!title) return null
   const metadata = modal.querySelector<HTMLElement>(".videoMetadata--container")
-  const year = Number(text(modal.querySelector(".year"))?.match(/\d{4}/)?.[0]) || undefined
+  const parsedYear = Number(text(modal.querySelector(".year"))?.match(/\d{4}/)?.[0]) || undefined
   const duration = text(modal.querySelector(".duration")) ?? ""
   // "6 Episodes", "3 Seasons", or "Limited Series" for a show; "2h 33m" for a film.
-  const type = /season|episode|series/i.test(duration)
+  const parsedType = /season|episode|series/i.test(duration)
     ? ("series" as const)
     : /\d+\s*h|\d+\s*m/i.test(duration)
       ? ("movie" as const)
       : undefined
+  // The card the modal opened from carries the page's own year and kind once stamped; the modal's metadata text is the fallback.
+  const stamped = stampedMeta(modalCard(root) ?? modal)
+  const year = stamped.year ?? parsedYear
+  const type = stamped.type ?? parsedType
+  const runtime = stamped.runtime
   return {
     anchor: metadata ?? modal,
-    query: { title, ...(year ? { year } : {}), ...(type ? { type } : {}) },
+    query: {
+      title,
+      ...(runtime ? { runtime } : {}),
+      ...(type ? { type } : {}),
+      ...(year ? { year } : {}),
+    },
   }
 }
 
@@ -190,10 +234,10 @@ export function renderPanel(
       panel.append(imdb)
     }
     if (options.showRottenTomatoes && rating.rottenTomatoes !== null) {
-      panel.append(pill(doc, `Rotten Tomatoes ${rating.rottenTomatoes}%`))
+      panel.append(pill(doc, `Rotten Tomatoes ${rating.rottenTomatoes}%`, "rmo-pill--rt"))
     }
     if (options.showMetascore && rating.metascore !== null) {
-      panel.append(pill(doc, `Metacritic ${rating.metascore}`))
+      panel.append(pill(doc, `Metacritic ${rating.metascore}`, "rmo-pill--mc"))
     }
   }
   if (anchor.classList.contains("videoMetadata--container"))

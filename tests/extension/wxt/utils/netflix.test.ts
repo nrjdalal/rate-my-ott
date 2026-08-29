@@ -16,8 +16,9 @@ import {
 
 // The current cards (a row card, a Top 10 card with its rank numeral, a Continue Watching card), the legacy slider and gallery cards, and a card with no title to skip.
 const CARDS = `
-<a href="/browse?jbv=81616273" aria-label="Operation Safed Sagar: The Untold Story of the Kargil War" data-uia="standard-card"><div><img alt="" class="standard-card tracked-card"></div></a>
+<a href="/browse?jbv=81616273" aria-label="Operation Safed Sagar: The Untold Story of the Kargil War" data-uia="standard-card" data-rmo-meta data-rmo-year="2026" data-rmo-type="series"><div><img alt="" class="standard-card tracked-card"></div></a>
 <a href="/browse?jbv=82023350" aria-label="Alpha" data-uia="ranked-card"><div><svg></svg></div><div><img alt="" class="ranked-card tracked-card"></div></a>
+<a href="/browse?jbv=81715790" aria-label="72 HOURS" data-uia="standard-card" data-rmo-meta data-rmo-year="2026" data-rmo-type="movie" data-rmo-runtime="105"><div><img alt="" class="standard-card tracked-card"></div></a>
 <a href="/browse?jbv=82760630" aria-label="Chainsmoker Cat" data-uia="progress-card"><div><img alt="" class="continue-watching-card tracked-card"></div></a>
 <div class="slider-item"><div class="title-card-container"><div id="title-card-0-0" class="title-card">
   <a href="/watch/80100172?tctx=1" aria-label="Rick and Morty" class="slider-refocus">
@@ -67,15 +68,35 @@ const page = (html: string, url = "https://www.netflix.com/browse") => {
 
 describe("readCard", () => {
   test("reads the title from the anchor label and the identity from the href, for every card kind", () => {
-    const [standard, ranked, progress, slider, gallery, empty] = findCards(page(CARDS))
+    const [standard, ranked, film, progress, slider, gallery, empty] = findCards(page(CARDS))
+    // A stamped card carries the page's year and kind; an unstamped current card is pending; the legacy markup never waits.
     expect(readCard(standard as Element)).toEqual({
       id: "81616273",
+      pending: false,
       title: "Operation Safed Sagar: The Untold Story of the Kargil War",
+      type: "series",
+      year: 2026,
     })
-    expect(readCard(ranked as Element)).toEqual({ id: "82023350", title: "Alpha" })
-    expect(readCard(progress as Element)).toEqual({ id: "82760630", title: "Chainsmoker Cat" })
-    expect(readCard(slider as Element)).toEqual({ id: "80100172", title: "Rick and Morty" })
-    expect(readCard(gallery as Element)).toEqual({ id: "81234567", title: "Ikka" })
+    expect(readCard(ranked as Element)).toEqual({ id: "82023350", pending: true, title: "Alpha" })
+    expect(readCard(film as Element)).toEqual({
+      id: "81715790",
+      pending: false,
+      runtime: 105,
+      title: "72 HOURS",
+      type: "movie",
+      year: 2026,
+    })
+    expect(readCard(progress as Element)).toEqual({
+      id: "82760630",
+      pending: true,
+      title: "Chainsmoker Cat",
+    })
+    expect(readCard(slider as Element)).toEqual({
+      id: "80100172",
+      pending: false,
+      title: "Rick and Morty",
+    })
+    expect(readCard(gallery as Element)).toEqual({ id: "81234567", pending: false, title: "Ikka" })
     expect(readCard(empty as Element)).toBeNull()
   })
 
@@ -92,13 +113,19 @@ describe("readCard", () => {
 describe("renderBadge", () => {
   test("puts one badge on the artwork, replaces it on a rerender, and removes it for a miss", () => {
     const doc = page(CARDS)
-    const card = findCards(doc)[3] as Element
+    const card = findCards(doc)[4] as Element
     renderBadge(card, rating(), options)
     renderBadge(card, rating(), options)
     const badges = doc.querySelectorAll(".rmo-badge")
     expect(badges.length).toBe(1)
     expect(badges[0]?.parentElement?.classList.contains("boxart-container")).toBe(true)
-    expect(badges[0]?.textContent).toBe("IMDb9.1RT94%")
+    expect([...(badges[0]?.children ?? [])].map((s) => s.textContent)).toEqual(["9.1", "94"])
+    expect([...(badges[0]?.children ?? [])].map((s) => s.getAttribute("aria-label"))).toEqual([
+      "IMDb 9.1",
+      "Rotten Tomatoes 94%",
+    ])
+    expect(badges[0]?.children[0]?.className).toBe("rmo-score rmo-score--imdb")
+    expect(badges[0]?.children[1]?.className).toBe("rmo-score rmo-score--rt")
     expect(hasBadge(card)).toBe(true)
 
     renderBadge(card, rating({ found: false }), options)
@@ -112,7 +139,9 @@ describe("renderBadge", () => {
       showMetascore: false,
       showRottenTomatoes: false,
     })
-    expect(doc.querySelector(".rmo-badge")?.textContent).toBe("IMDb9.1")
+    expect(doc.querySelector(".rmo-badge")?.textContent).toBe("9.1")
+    renderBadge(card as Element, rating({ metascore: 85 }), options)
+    expect(doc.querySelector(".rmo-score--mc")?.className).toBe("rmo-score rmo-score--mc")
     renderBadge(
       card as Element,
       rating({ imdbRating: null, metascore: null, rottenTomatoes: null }),
@@ -147,12 +176,29 @@ describe("readModal and renderPanel", () => {
     const link = panels[0]?.querySelector("a")
     expect(link?.getAttribute("href")).toBe("https://www.imdb.com/title/tt1160419/")
     expect(link?.textContent).toBe("IMDb 8.0900K votes")
+    expect(panels[0]?.querySelector(".rmo-pill--rt")?.textContent).toBe("Rotten Tomatoes 94%")
     expect(hasPanel(modal!.anchor)).toBe(true)
   })
 
   test("the modal's title comes from the card its jbv names, over the art's alt text", () => {
     const doc = page(CARDS + MODAL, "https://www.netflix.com/browse?jbv=82023350")
     expect(readModal(doc)?.query.title).toBe("Alpha")
+  })
+
+  test("the modal takes the year, kind, and length from the stamped card over its own metadata text", () => {
+    const doc = page(CARDS + MODAL, "https://www.netflix.com/browse?jbv=81616273")
+    expect(readModal(doc)?.query).toEqual({
+      title: "Operation Safed Sagar: The Untold Story of the Kargil War",
+      type: "series",
+      year: 2026,
+    })
+    const film = page(CARDS + MODAL, "https://www.netflix.com/browse?jbv=81715790")
+    expect(readModal(film)?.query).toEqual({
+      runtime: 105,
+      title: "72 HOURS",
+      type: "movie",
+      year: 2026,
+    })
   })
 
   test("a series modal is typed by its season count, a limited series too, and a miss gets a muted pill", () => {

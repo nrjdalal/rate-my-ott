@@ -7,6 +7,7 @@ import type { LookupReply, Message } from "@/utils/messages"
 import {
   findCards,
   hasBadge,
+  STAMP,
   hasPanel,
   readCard,
   readModal,
@@ -20,10 +21,12 @@ import { DEFAULT_SETTINGS, settings, type Settings } from "@/utils/settings"
 const FLUSH_MS = 250
 const RESCAN_MS = 2000
 const OBSERVE_MS = 100
+// How long a current card may stay unstamped before it is looked up by title alone: the MAIN-world script stamps within a scan or two, and a page where it never does (Netflix moved its internals) still gets badges, just less precise ones.
+const STAMP_WAIT_MS = 2500
 
 // The page's own bookkeeping key; results are matched to requests by position, so this only has to be stable within the page.
 const keyOf = (query: TitleQuery) =>
-  `${query.title.trim().toLowerCase()}|${query.year ?? ""}|${query.type ?? ""}`
+  `${query.title.trim().toLowerCase()}|${query.year ?? ""}|${query.type ?? ""}|${query.runtime ?? ""}`
 
 export default defineContentScript({
   matches: ["*://*.netflix.com/*"],
@@ -31,6 +34,7 @@ export default defineContentScript({
   async main(ctx) {
     let current: Settings = await settings.getValue()
     const answers = new Map<string, Rating | null>()
+    const firstSeen = new Map<string, number>()
     const inflight = new Set<string>()
     const pending = new Map<string, TitleQuery>()
     let flushTimer: number | null = null
@@ -50,10 +54,21 @@ export default defineContentScript({
     const paint = () => {
       if (!current.enabled) return
       if (current.badges) {
+        const now = Date.now()
         for (const card of findCards(document)) {
           const info = readCard(card)
           if (!info) continue
-          const rating = ask({ title: info.title })
+          if (info.pending) {
+            const seen = firstSeen.get(info.id) ?? now
+            firstSeen.set(info.id, seen)
+            if (now - seen < STAMP_WAIT_MS) continue
+          }
+          const rating = ask({
+            title: info.title,
+            ...(info.runtime ? { runtime: info.runtime } : {}),
+            ...(info.type ? { type: info.type } : {}),
+            ...(info.year ? { year: info.year } : {}),
+          })
           if (rating !== undefined && !hasBadge(card)) renderBadge(card, rating, current)
         }
       }
@@ -109,7 +124,13 @@ export default defineContentScript({
     })
 
     const observer = new MutationObserver(scheduleScan)
-    observer.observe(document.body, { childList: true, subtree: true })
+    // Attribute changes too, so a stamp landing on a card repaints it without waiting for the next rescan.
+    observer.observe(document.body, {
+      attributeFilter: [STAMP],
+      attributes: true,
+      childList: true,
+      subtree: true,
+    })
     ctx.onInvalidated(() => observer.disconnect())
     ctx.setInterval(paint, RESCAN_MS)
     paint()

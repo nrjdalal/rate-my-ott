@@ -6,11 +6,11 @@ description: IMDb, Rotten Tomatoes, and Metacritic ratings on every title while 
 
 # Introduction
 
-Rate My OTT is a browser extension that puts IMDb, Rotten Tomatoes, and Metacritic ratings on every title while you browse Netflix. Each title card gets a small badge with the IMDb score, and the title modal gets a ratings row with a link to the IMDb page. Other streaming platforms come next.
+Rate My OTT is a browser extension that puts IMDb, Rotten Tomatoes, and Metacritic ratings on every title while you browse Netflix. Each title card gets one small pill with the scores (yellow IMDb, red Rotten Tomatoes, green Metacritic, numbers only), and the title modal gets a ratings row with a link to the IMDb page. Other streaming platforms come next.
 
 ## How it works
 
-1. A content script on `netflix.com` reads the titles Netflix renders (from each card's label, and from the open modal's title, year, and kind).
+1. A content script on `netflix.com` reads the titles Netflix renders (each card's label), and a second script in the page's own world reads the year, kind, and runtime Netflix fetched for each card and stamps them on it, so the lookup asks for the right "Alpha".
 2. The extension's background worker sends them in batches to the Ratings API, `POST /api/v1/ratings`, and remembers the answers for the browser session.
 3. The API answers from its Postgres cache and asks [OMDb](https://www.omdbapi.com) only for titles it has not seen (or has not refreshed in a week), so a browsing session costs a handful of provider calls.
 

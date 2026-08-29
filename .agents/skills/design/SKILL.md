@@ -66,7 +66,7 @@ When a change establishes or alters a convention, update this file in the same c
 ## Extension surfaces
 
 - The popup and options page (`extension/wxt/entrypoints/*`) use Tailwind utilities and the small primitives in `extension/wxt/components/`; no shadcn there, since the extension is not a Next app and its two screens do not warrant the sync. Neutral grays plus the `imdb` token (`--color-imdb`, IMDb yellow) for the one accent; light and dark via `dark:`.
-- Anything painted onto netflix.com lives in `extension/wxt/assets/netflix.css`: every class prefixed `rmo-`, each rule setting only what it needs, no reset and no Tailwind, so nothing restyles the page. The badge is `pointer-events: none` and absolutely placed on the artwork; the modal row is real pills after the metadata row.
+- Anything painted onto netflix.com lives in `extension/wxt/assets/netflix.css`: every class prefixed `rmo-`, each rule setting only what it needs, no reset and no Tailwind, so nothing restyles the page. The card badge is one segmented pill in the artwork's top-right corner, numbers only, one partition per platform in its hue (IMDb yellow, Rotten Tomatoes red, Metacritic green) as a tinted fill with the number in the hue over a dark translucent base, a missing score dropping its partition; `pointer-events: none` so the card still hovers and clicks. The modal row is real pills after the metadata row, tinted the same way with a same-hue border.
 
 ## File and export naming
 

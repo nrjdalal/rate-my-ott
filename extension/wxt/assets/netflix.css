@@ -4,43 +4,58 @@
   position: relative;
 }
 
+/* One pill per card in the top-right corner of the artwork, partitioned by platform: yellow is IMDb, red is Rotten Tomatoes, green is Metacritic, and a missing score simply drops its partition, so a card reads ( 6.6 | 80 | 63 ), ( 6.6 | 80 ), or ( 6.6 ). Numbers only; the color is the label. Each partition is a tinted fill of its hue over a dark base with the number in the hue, the way a status badge reads, and the pill is pointer-transparent so the card underneath still hovers and clicks. */
 .rmo-badge {
+  backdrop-filter: blur(6px);
+  background: rgba(18, 18, 18, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  display: inline-flex;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  z-index: 5;
+}
+
+.rmo-score {
   align-items: center;
-  background: rgba(0, 0, 0, 0.78);
-  border-radius: 4px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-  color: #fff;
   display: inline-flex;
   font-family:
     "Netflix Sans",
     system-ui,
     -apple-system,
     sans-serif;
-  font-size: 12px;
-  font-weight: 600;
-  gap: 6px;
-  left: 6px;
-  line-height: 1.2;
-  padding: 3px 7px;
-  pointer-events: none;
-  position: absolute;
-  top: 6px;
-  z-index: 5;
+  font-size: 11px;
+  font-weight: 700;
+  height: 18px;
+  justify-content: center;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  padding: 0 6px;
 }
 
-.rmo-badge__chip {
-  align-items: center;
-  display: inline-flex;
-  gap: 3px;
+.rmo-score + .rmo-score {
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
 }
 
-.rmo-badge__mark {
+.rmo-score--imdb {
+  background: rgba(245, 197, 24, 0.18);
   color: #f5c518;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
 }
 
+.rmo-score--rt {
+  background: rgba(250, 50, 10, 0.22);
+  color: #ff7a5c;
+}
+
+.rmo-score--mc {
+  background: rgba(102, 204, 51, 0.18);
+  color: #8ee05a;
+}
+
+/* The modal's ratings row: real pills after the metadata line, in the same three colors. */
 .rmo-panel {
   display: flex;
   flex-wrap: wrap;
@@ -63,12 +78,25 @@
 }
 
 .rmo-pill--imdb {
-  background: #f5c518;
-  color: #000;
+  background: rgba(245, 197, 24, 0.16);
+  border: 1px solid rgba(245, 197, 24, 0.45);
+  color: #f5c518;
 }
 
 .rmo-pill--imdb:hover {
-  background: #ffd83d;
+  background: rgba(245, 197, 24, 0.28);
+}
+
+.rmo-pill--rt {
+  background: rgba(250, 50, 10, 0.18);
+  border: 1px solid rgba(250, 50, 10, 0.5);
+  color: #ff7a5c;
+}
+
+.rmo-pill--mc {
+  background: rgba(102, 204, 51, 0.16);
+  border: 1px solid rgba(102, 204, 51, 0.45);
+  color: #8ee05a;
 }
 
 .rmo-pill--muted {
