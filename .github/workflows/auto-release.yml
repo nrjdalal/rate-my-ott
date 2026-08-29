@@ -37,9 +37,13 @@ jobs:
           # the extension zips a release ships: built against the production API (the repo variable
           # WXT_PUBLIC_API_URL, which becomes the extension's default API origin and host permission),
           # one per browser, named by the release version wxt reads from the root package.json
+          # the release page also lists GitHub's automatic "Source code" archives, so the notes say which asset is the extension
+          install_notes() {
+            printf '### 📦 Install\n\nDownload `rate-my-ott-%s-chrome.zip` (Chrome, Edge, Brave) or `rate-my-ott-%s-firefox.zip` from the assets below, not the "Source code" archives. Unzip it and load the folder from `chrome://extensions` with Developer mode on: https://rate-my-ott.vercel.app/docs/getting-started/install\n' "${1#v}" "${1#v}"
+          }
           attach_extension() {
-            (cd extension/wxt && WXT_PUBLIC_API_URL="${{ vars.WXT_PUBLIC_API_URL }}" bun run zip && bun run zip:firefox)
-            gh release upload "$1" extension/wxt/.output/*.zip --clobber
+            (cd extension/wxt && export WXT_PUBLIC_API_URL="${{ vars.WXT_PUBLIC_API_URL }}" && bun run zip && bun run zip:firefox)
+            gh release upload "$1" extension/wxt/.output/rate-my-ott-*.zip --clobber
           }
           # the changelog commit is mechanical (generated from already-reviewed PR titles),
           # so it lands directly on canary instead of going through a PR
@@ -59,7 +63,7 @@ jobs:
             if [ "$(git rev-list "$LAST_TAG"..HEAD --count --invert-grep --grep='^ci(changelog)')" = "0" ]; then
               if ! gh release view "$LAST_TAG" > /dev/null 2>&1; then
                 NOTES=$(awk -v ver="## $LAST_TAG" '$0 == ver { flag = 1; next } /^## / { flag = 0 } flag' CHANGELOG.md)
-                gh release create "$LAST_TAG" --title "$LAST_TAG" --notes "$NOTES" --latest
+                gh release create "$LAST_TAG" --title "$LAST_TAG" --notes "$(install_notes "$LAST_TAG")$NOTES" --latest
                 NODE_ENV=production SKIP_ENV_VALIDATION=true bunx turbo build --filter='./packages/*' --filter=@api/hono
                 attach_extension "$LAST_TAG"
               fi
@@ -120,7 +124,7 @@ jobs:
             # publish a GitHub release whose notes mirror the changelog section
             NOTES=$(awk -v ver="## v$NEW_VERSION" '$0 == ver { flag = 1; next } /^## / { flag = 0 } flag' CHANGELOG.md)
             if ! gh release view "v$NEW_VERSION" > /dev/null 2>&1; then
-              gh release create "v$NEW_VERSION" --title "v$NEW_VERSION" --notes "$NOTES" --latest
+              gh release create "v$NEW_VERSION" --title "v$NEW_VERSION" --notes "$(install_notes "v$NEW_VERSION")$NOTES" --latest
             fi
             attach_extension "v$NEW_VERSION"
           else

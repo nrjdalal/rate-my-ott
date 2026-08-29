@@ -3,7 +3,7 @@ import { compactCount, oneDecimal } from "@/utils/format"
 
 // Everything that reads or writes Netflix's DOM, as pure functions over the nodes they are handed (no globals, no extension APIs), so tests/extension/wxt/utils/netflix.test.ts can drive them with a fixture in happy-dom.
 
-// A card as the scanner reads it. pending is a current card the MAIN-world script has not stamped yet (see netflix-entities.content.ts): its year and kind are on the way, and a lookup sent without them would match the wrong title and be cached for a week.
+// A card as the scanner reads it. pending is a card the MAIN-world script has not stamped yet (see netflix-entities.content.ts): its year and kind are on the way, and the API answers nothing without a year, so the scanner waits for the stamp rather than ask.
 export type CardInfo = {
   id: string
   pending: boolean
@@ -15,8 +15,6 @@ export type CardInfo = {
 
 // The attribute the MAIN-world script sets once it has read a card's fiber; data-rmo-year and data-rmo-type sit beside it when the page named them.
 export const STAMP = "data-rmo-meta"
-
-export type DisplayOptions = { showMetascore: boolean; showRottenTomatoes: boolean }
 
 // Every lockup a badge goes on. Netflix's current browse UI renders a card as one anchor labelled with the title and linking to /browse?jbv=<id>: standard-card (rows), ranked-card (Top 10), progress-card (Continue Watching); any other labelled jbv link is a card too. The legacy .title-card markup stays beside them for pages that still render it.
 export const CARD_SELECTOR =
@@ -49,8 +47,8 @@ export function readCard(card: Element): CardInfo | null {
   const stamped = card.hasAttribute(STAMP)
   return {
     id: match ? (match[1] as string) : title,
-    // Only a current (jbv) card has a stamp to wait for; the legacy markup never gets one.
-    pending: !stamped && /[?&]jbv=/.test(href),
+    // Any card the page identifies (a jbv or /watch/ link) gets a stamp from its React props; only a bare label has nothing to wait for.
+    pending: !stamped && match !== null,
     title,
     ...stampedMeta(card),
   }
@@ -95,30 +93,22 @@ const score = (doc: Document, className: string, value: string, label: string): 
   return el
 }
 
-// What a rating is worth showing as: the IMDb score first, then Rotten Tomatoes and Metacritic when the user wants them; nothing for a miss or a title with no scores, so no badge rather than an empty one.
-function scores(doc: Document, rating: Rating, options: DisplayOptions): HTMLElement[] {
+// What a rating is worth showing as: one partition per platform with a score, IMDb today; nothing for a miss or a title nobody has rated yet, so no badge rather than an empty one.
+function scores(doc: Document, rating: Rating): HTMLElement[] {
   const out: HTMLElement[] = []
   if (rating.imdbRating !== null) {
     const value = oneDecimal(rating.imdbRating)
     out.push(score(doc, "rmo-score--imdb", value, `IMDb ${value}`))
   }
-  if (options.showRottenTomatoes && rating.rottenTomatoes !== null) {
-    const label = `Rotten Tomatoes ${rating.rottenTomatoes}%`
-    out.push(score(doc, "rmo-score--rt", String(rating.rottenTomatoes), label))
-  }
-  if (options.showMetascore && rating.metascore !== null) {
-    const label = `Metacritic ${rating.metascore}`
-    out.push(score(doc, "rmo-score--mc", String(rating.metascore), label))
-  }
   return out
 }
 
 // Idempotent: the card ends with exactly one badge (or none), whatever it had before.
-export function renderBadge(card: Element, rating: Rating | null, options: DisplayOptions): void {
+export function renderBadge(card: Element, rating: Rating | null): void {
   const host = badgeHost(card)
   host.querySelector(`:scope > .${BADGE}`)?.remove()
   if (!rating || !rating.found) return
-  const parts = scores(host.ownerDocument, rating, options)
+  const parts = scores(host.ownerDocument, rating)
   if (parts.length === 0) return
   const badge = host.ownerDocument.createElement("span")
   badge.className = BADGE
@@ -152,13 +142,14 @@ function modalTitle(root: ParentNode, modal: HTMLElement): string | undefined {
   )
 }
 
-// The open title modal, if any, with its title and the year and kind its metadata row states, which is what lets the lookup disambiguate a remake.
+// The open title modal, if any, with its title and the year and kind its metadata row states, which is what lets the lookup disambiguate a remake. The anchor is the details column the rating row joins; a modal without one (the hover preview) gets no row, the card's badge already says it.
 export function readModal(root: ParentNode): ModalInfo | null {
   const modal = root.querySelector<HTMLElement>(MODAL_SELECTOR)
   if (!modal) return null
   const title = modalTitle(root, modal)
   if (!title) return null
-  const metadata = modal.querySelector<HTMLElement>(".videoMetadata--container")
+  const details = modal.querySelector<HTMLElement>(".previewModal--detailsMetadata-right")
+  if (!details) return null
   const parsedYear = Number(text(modal.querySelector(".year"))?.match(/\d{4}/)?.[0]) || undefined
   const duration = text(modal.querySelector(".duration")) ?? ""
   // "6 Episodes", "3 Seasons", or "Limited Series" for a show; "2h 33m" for a film.
@@ -173,7 +164,7 @@ export function readModal(root: ParentNode): ModalInfo | null {
   const type = stamped.type ?? parsedType
   const runtime = stamped.runtime
   return {
-    anchor: metadata ?? modal,
+    anchor: details,
     query: {
       title,
       ...(runtime ? { runtime } : {}),
@@ -184,65 +175,37 @@ export function readModal(root: ParentNode): ModalInfo | null {
 }
 
 export const hasPanel = (anchor: HTMLElement): boolean =>
-  (anchor.parentElement ?? anchor).querySelector(`.${PANEL}`) !== null
+  anchor.querySelector(`:scope > .${PANEL}`) !== null
 
-const pill = (doc: Document, label: string, className = ""): HTMLElement => {
-  const el = doc.createElement("span")
-  el.className = `rmo-pill ${className}`.trim()
-  el.textContent = label
-  return el
-}
-
-// The modal's rating row: an IMDb pill linking to the title page, then Rotten Tomatoes and Metacritic when wanted, or one muted pill saying the title was not found. Inserted after the metadata row when there is one (so it reads as part of it), else appended to the modal. Idempotent like the badge.
-export function renderPanel(
-  anchor: HTMLElement,
-  rating: Rating | null,
-  options: DisplayOptions,
-): void {
+// The modal's rating, as one more row of its details column ("Cast:", "Genres:", "This Movie Is:"): Netflix's own row classes, so it reads as Netflix's, with the score and vote count linking to the IMDb page. Nothing at all for a miss or a title nobody has rated yet. Idempotent like the badge.
+export function renderPanel(anchor: HTMLElement, rating: Rating | null): void {
   const doc = anchor.ownerDocument
-  const parent = anchor.parentElement ?? anchor
-  parent.querySelector(`.${PANEL}`)?.remove()
-  const panel = doc.createElement("div")
-  panel.className = PANEL
-  panel.setAttribute("role", "group")
-  panel.setAttribute("aria-label", "Ratings")
-  if (!rating) return
-  if (
-    !rating.found ||
-    (rating.imdbRating === null && rating.rottenTomatoes === null && rating.metascore === null)
-  ) {
-    panel.append(pill(doc, "No ratings found", "rmo-pill--muted"))
+  anchor.querySelector(`:scope > .${PANEL}`)?.remove()
+  if (!rating || !rating.found || rating.imdbRating === null) return
+  const row = doc.createElement("div")
+  row.className = `previewModal--tags ${PANEL}`
+  const label = doc.createElement("span")
+  label.className = "previewModal--tags-label"
+  label.textContent = "IMDb:"
+  const item = doc.createElement("span")
+  item.className = "tag-item"
+  // Netflix leaves the gap after a label inside the item, as a leading space.
+  item.append(" ")
+  const value = `${oneDecimal(rating.imdbRating)}${
+    rating.imdbVotes !== null ? ` with ${compactCount(rating.imdbVotes)} votes` : ""
+  }`
+  if (rating.imdbId) {
+    const link = doc.createElement("a")
+    link.href = `https://www.imdb.com/title/${rating.imdbId}/`
+    link.target = "_blank"
+    link.rel = "noopener noreferrer"
+    link.textContent = value
+    item.append(link)
   } else {
-    if (rating.imdbRating !== null) {
-      let imdb: HTMLElement
-      if (rating.imdbId) {
-        const link = doc.createElement("a")
-        link.href = `https://www.imdb.com/title/${rating.imdbId}/`
-        link.target = "_blank"
-        link.rel = "noopener noreferrer"
-        imdb = link
-      } else {
-        imdb = doc.createElement("span")
-      }
-      imdb.className = "rmo-pill rmo-pill--imdb"
-      imdb.append(`IMDb ${oneDecimal(rating.imdbRating)}`)
-      if (rating.imdbVotes !== null) {
-        const votes = doc.createElement("small")
-        votes.textContent = `${compactCount(rating.imdbVotes)} votes`
-        imdb.append(votes)
-      }
-      panel.append(imdb)
-    }
-    if (options.showRottenTomatoes && rating.rottenTomatoes !== null) {
-      panel.append(pill(doc, `Rotten Tomatoes ${rating.rottenTomatoes}%`, "rmo-pill--rt"))
-    }
-    if (options.showMetascore && rating.metascore !== null) {
-      panel.append(pill(doc, `Metacritic ${rating.metascore}`, "rmo-pill--mc"))
-    }
+    item.textContent = value
   }
-  if (anchor.classList.contains("videoMetadata--container"))
-    anchor.insertAdjacentElement("afterend", panel)
-  else anchor.append(panel)
+  row.append(label, item)
+  anchor.append(row)
 }
 
 export function removeAll(root: ParentNode): void {

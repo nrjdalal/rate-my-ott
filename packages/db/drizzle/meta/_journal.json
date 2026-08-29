@@ -8,6 +8,20 @@
       "when": 1787980373795,
       "tag": "0000_ratings",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787986728684,
+      "tag": "0001_drop_rating",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787986729227,
+      "tag": "0002_imdb",
+      "breakpoints": true
     }
   ]
 }

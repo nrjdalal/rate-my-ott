@@ -1,4 +1,4 @@
-// Netflix's browse page is React, and its card components carry the GraphQL entity the page fetched for them: the card's own props hold videoId and title, and the row's props hold every edge with a unifiedEntity { __typename: "Movie" | "Show", releaseYear }. That is the only place the page states a title's year and kind, which is what keeps "Alpha (2026)" apart from the 2018 film. React's fiber properties are visible only from the page's own JS world, so entrypoints/netflix-entities.content.ts runs there and stamps what this reads onto the card as data attributes for the isolated-world scanner. Pure over the element it is handed, so tests can hang a fake fiber chain on a happy-dom node.
+// Netflix's browse page is React, and its card components carry what the page fetched for them. The current card (a jbv anchor) holds videoId and title in its own props, and its row's props hold every edge with a unifiedEntity { __typename: "Movie" | "Show", releaseYear, runtimeSec }. The legacy card (.title-card, still rendered on genre pages) holds one videoModel { title, releaseYear, runtime, summary: { id, type: "movie" | "show" } }. Either is the only place the page states a title's year and kind, which is what keeps "Alpha (2026)" apart from the 2018 film; for a show the year is its latest season's, not its premiere's. React's fiber properties are visible only from the page's own JS world, so entrypoints/netflix-entities.content.ts runs there and stamps what this reads onto the card as data attributes for the isolated-world scanner. Pure over the element it is handed, so tests can hang a fake fiber chain on a happy-dom node.
 
 export type Entity = {
   runtime?: number
@@ -34,8 +34,43 @@ const entityOf = (edge: unknown): Record<string, unknown> | null => {
   return edge.node.unifiedEntity
 }
 
-// Walk up from a card anchor: the first props with a videoId are the card's, the first section fragment with entity edges is the row's, and the edge whose entity has the card's videoId names the year and kind. Null when the element has no fiber or no card above it.
+// The kind a legacy videoModel states, and a film's length in minutes from its seconds (a show's runtime is 0 or an episode's, not a length worth matching on).
+function fromVideoModel(model: Record<string, unknown>): Entity | null {
+  const summary = isRecord(model.summary) ? model.summary : undefined
+  const videoId =
+    typeof summary?.id === "number"
+      ? summary.id
+      : typeof model.unifiedEntityId === "string"
+        ? Number(model.unifiedEntityId.split(":")[1])
+        : Number.NaN
+  if (!Number.isInteger(videoId)) return null
+  const type = summary?.type === "movie" ? "movie" : summary?.type === "show" ? "series" : undefined
+  const year = typeof model.releaseYear === "number" ? model.releaseYear : undefined
+  const runtime =
+    type === "movie" && typeof model.runtime === "number" && model.runtime > 0
+      ? Math.round(model.runtime / 60)
+      : undefined
+  return {
+    title: typeof model.title === "string" ? model.title : "",
+    videoId,
+    ...(runtime ? { runtime } : {}),
+    ...(type ? { type } : {}),
+    ...(year ? { year } : {}),
+  }
+}
+
+// The video id the card's own link names (jbv= today, /watch/ or /title/ before), which any props met on the way up must agree with: a row, a billboard, or a modal above the card carries a model of its own.
+const linkedId = (card: Element): number | undefined => {
+  const href =
+    (card.matches("a[href]") ? card : card.querySelector("a[href]"))?.getAttribute("href") ?? ""
+  const match = href.match(/(?:\/watch\/|\/title\/|[?&]jbv=)(\d+)/)
+  return match ? Number(match[1]) : undefined
+}
+
+// Walk up from a card: a legacy videoModel for the card's own id is the whole answer; otherwise the first props with the card's videoId are the card's, the first section fragment with entity edges is the row's, and the edge whose entity has the card's videoId names the year and kind. Null when the element has no fiber or no card above it.
 export function readEntity(card: Element, maxDepth = 40): Entity | null {
+  const linked = linkedId(card)
+  const owns = (id: number) => linked === undefined || id === linked
   let videoId: number | undefined
   let title: string | undefined
   let edges: unknown[] | undefined
@@ -43,7 +78,11 @@ export function readEntity(card: Element, maxDepth = 40): Entity | null {
   for (let depth = 0; fiber && depth < maxDepth; depth += 1) {
     const props = fiber.memoizedProps
     if (isRecord(props)) {
-      if (videoId === undefined && typeof props.videoId === "number") {
+      if (isRecord(props.videoModel)) {
+        const legacy = fromVideoModel(props.videoModel)
+        if (legacy && owns(legacy.videoId)) return legacy
+      }
+      if (videoId === undefined && typeof props.videoId === "number" && owns(props.videoId)) {
         videoId = props.videoId
         if (typeof props.title === "string") title = props.title
       }

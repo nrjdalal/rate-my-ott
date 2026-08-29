@@ -1,6 +1,6 @@
 {
   "name": "rate-my-ott",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
   "workspaces": [
     "api/*",
@@ -21,6 +21,7 @@
     "devtools": "turbo devtools",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
+    "imdb:sync": "turbo run build --filter='./packages/*' && bun run --cwd api/hono imdb:sync",
     "lint": "oxlint",
     "postinstall": "bun .github/scripts/deps-manager.ts",
     "prepare": "bunx lefthook install",

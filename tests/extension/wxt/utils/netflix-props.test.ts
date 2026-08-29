@@ -59,6 +59,53 @@ describe("readEntity", () => {
     expect(readEntity(cardWithFibers(null))).toEqual({ title: "Alpha", videoId: 82023350 })
   })
 
+  // The legacy card (.title-card on genre pages) carries one videoModel; a show states its latest season's year and no length, a film its length in seconds.
+  test("a legacy card reads its videoModel: the id, title, year, and kind, and a film's length", () => {
+    const legacy = (model: Record<string, unknown>) => {
+      const window = new Window({ url: "https://www.netflix.com/browse/genre/83" })
+      window.document.body.innerHTML = `<div class="title-card"><a href="/watch/70155590?tctx=1" aria-label="The Mentalist"><div class="boxart-container"><img alt=""></div></a></div>`
+      const card = window.document.querySelector(".title-card") as unknown as Element
+      const holder = { memoizedProps: { videoModel: model }, return: null }
+      ;(card as unknown as Record<string, unknown>)["__reactFiber$legacy"] = {
+        memoizedProps: { className: "title-card" },
+        return: { memoizedProps: {}, return: holder },
+      }
+      return card
+    }
+    expect(
+      readEntity(
+        legacy({
+          releaseYear: 2015,
+          runtime: 0,
+          summary: { id: 70155590, type: "show" },
+          title: "The Mentalist",
+          titleType: "video",
+          unifiedEntityId: "Video:70155590",
+        }),
+      ),
+    ).toEqual({ title: "The Mentalist", type: "series", videoId: 70155590, year: 2015 })
+    expect(
+      readEntity(
+        legacy({
+          releaseYear: 2026,
+          runtime: 8400,
+          summary: { id: 70155590, type: "movie" },
+          title: "Alpha",
+          unifiedEntityId: "Video:70155590",
+        }),
+      ),
+    ).toEqual({ runtime: 140, title: "Alpha", type: "movie", videoId: 70155590, year: 2026 })
+    // A model higher up (a row's, a billboard's) that names another video is not the card's; the walk goes on and finds nothing.
+    const stray = legacy({ releaseYear: 2018, summary: { id: 999, type: "movie" }, title: "Alpha" })
+    expect(readEntity(stray)).toBeNull()
+    // The id falls back to the unified entity id; a model without either is not a card.
+    expect(readEntity(legacy({ title: "X", unifiedEntityId: "Video:70155590" }))).toEqual({
+      title: "X",
+      videoId: 70155590,
+    })
+    expect(readEntity(legacy({ title: "X" }))).toBeNull()
+  })
+
   test("an element with no fiber, or no card above it, reads as null", () => {
     const window = new Window({ url: "https://www.netflix.com/browse" })
     window.document.body.innerHTML = `<a href="/browse?jbv=1"></a>`

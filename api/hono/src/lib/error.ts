@@ -8,7 +8,6 @@ import { z } from "zod"
 
 // Every code the API can put in the { error } envelope. Single source of truth: the TS union, the OpenAPI schema, and the web client all derive from this list. "ERROR" is the catch-all for an HTTPException whose status isn't mapped below.
 export const ERROR_CODES = [
-  "BAD_GATEWAY",
   "BAD_REQUEST",
   "CONFLICT",
   "ERROR",
@@ -56,7 +55,6 @@ const httpExceptionCodes: Record<number, ErrorCode> = {
   403: "FORBIDDEN",
   404: "NOT_FOUND",
   429: "TOO_MANY_REQUESTS",
-  502: "BAD_GATEWAY",
   503: "SERVICE_UNAVAILABLE",
 }
 
@@ -119,10 +117,9 @@ export const conflictErrorResponses: ResponsesWithResolver = {
 export const notFoundErrorResponses: ResponsesWithResolver = {
   404: errorResponse("NOT_FOUND", "Not found"),
 }
-// Add to routes that ask a third-party provider: 502 when it fails or refuses the key, 503 when no key is configured at all.
-export const providerErrorResponses: ResponsesWithResolver = {
-  502: errorResponse("BAD_GATEWAY", "The ratings provider did not answer"),
-  503: errorResponse("SERVICE_UNAVAILABLE", "The ratings provider is not configured"),
+// Add to routes that read the IMDb index: 503 while it is empty (imdb:sync has not run).
+export const indexErrorResponses: ResponsesWithResolver = {
+  503: errorResponse("SERVICE_UNAVAILABLE", "The IMDb index is empty"),
 }
 // Add to routes with a request validator, the only thing that returns 400; the 400 also carries the per-field issues.
 export const validationErrorResponses: ResponsesWithResolver = {
