@@ -1,7 +1,7 @@
 import { defineContentScript } from "wxt/utils/define-content-script"
 
 import { BILLBOARD_SELECTOR, CARD_SELECTOR, MODAL_SELECTOR, STAMP } from "@/utils/netflix"
-import { linkedId, readBillboard, readEntity, type Entity } from "@/utils/netflix-props"
+import { linkedId, readBillboard, readEntity, sameTitle, type Entity } from "@/utils/netflix-props"
 
 // Runs in the page's own JS world (world: "MAIN"), where React's fiber properties are visible, and does one thing: stamp each card anchor with the year and kind Netflix fetched for it, as data attributes the isolated-world scanner (netflix.content.ts) reads. No extension API exists in this world, so the attributes are the whole interface, and nothing here touches the network or storage.
 
@@ -22,7 +22,7 @@ export default defineContentScript({
       const id = linkedId(node)
       if (id !== undefined) return node.getAttribute("data-rmo-id") === String(id)
       const label = node.getAttribute("aria-label")
-      return label === null || node.getAttribute("data-rmo-title") === label
+      return label === null || sameTitle(node.getAttribute("data-rmo-title") ?? "", label)
     }
 
     const stamp = () => {

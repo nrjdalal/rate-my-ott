@@ -71,7 +71,7 @@ A wrong score is worse than none, so every ambiguity is a miss. The [imdb-sync s
 
 ## `GET /api/v1/ratings/status`
 
-What the index holds and when it was last rebuilt: `{ "data": { "index": { "akas": 56088, "finishedAt": "2026-08-29T14:33:00.000Z", "names": 775897, "titles": 619222 } } }`, or `"index": null` while it has never been built. Each rebuild writes its record (`imdb_sync`) inside its own transaction, so the newest row always describes the index that is serving; a rebuild that failed leaves no row, which is how a stale index shows. The extension's popup reads it ("IMDb index: 619K titles, refreshed 2 hours ago").
+What the index holds and when it was last rebuilt: `{ "data": { "index": { "akas": 41093, "finishedAt": "2026-08-29T14:33:00.000Z", "names": 760902, "titles": 619222 } } }`, or `"index": null` while it has never been built. Each rebuild writes its record (`imdb_sync`) inside its own transaction, so the newest row always describes the index that is serving; a rebuild that failed leaves no row, which is how a stale index shows. The extension's popup reads it ("IMDb index: 619K titles, refreshed 2 hours ago").
 
 ## Errors
 

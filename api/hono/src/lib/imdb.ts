@@ -245,17 +245,17 @@ export function pickImdbTitle(
   if (!query.year) return null
   const now = options.now ?? new Date().getUTCFullYear()
   const fits = candidates.filter((candidate) => fitsQuery(candidate, query, options))
-  // A title that fits under its own name outranks any that fit only under an alternate one, and alternate-name candidates are taken only alone: an alternate name is a name a title merely answers to somewhere, and popularity says nothing about which title the platform showed under it.
-  const own = fits.filter((candidate) => !candidate.aka)
-  const fitting = own.length > 0 ? own : fits.length === 1 ? fits : []
   const runtime = query.runtime
   const checksRuntime = (title: ImdbTitle) =>
     runtime !== undefined && imdbType(title.titleType) === "movie"
   const verified = (title: ImdbTitle) =>
     (!query.year || title.startYear !== null) && (!checksRuntime(title) || title.runtime !== null)
-  const verifiable = fitting.filter(verified)
-  const pool = verifiable.length > 0 ? verifiable : fitting
-  const dropped = fitting.filter((title) => !pool.includes(title))
+  // What the statements could verify comes first, then, among those, a title that fits under its own name outranks the ones that fit only under an alternate name, which are taken only alone: an alternate name is a name a title merely answers to somewhere, and popularity says nothing about which title the platform showed under it. Verification first, or a fan video carrying a famous film's name as its original title (no runtime on record) would outrank the film itself.
+  const verifiable = fits.filter(verified)
+  const checked = verifiable.length > 0 ? verifiable : fits
+  const own = checked.filter((candidate) => !candidate.aka)
+  const pool = own.length > 0 ? own : checked.length === 1 ? checked : []
+  const dropped = fits.filter((title) => !pool.includes(title))
   if (pool.length === 0) return null
   const gap = (title: ImdbTitle) =>
     !checksRuntime(title) || title.runtime === null ? Infinity : Math.abs(title.runtime - runtime!)
@@ -264,7 +264,11 @@ export function pickImdbTitle(
     return byGap !== 0 ? byGap : votesOf(b) - votesOf(a)
   })
   const top = ranked[0] as ImdbTitle
-  if (dropped.some((title) => votesOf(title) >= VOTES_DOMINANCE * votesOf(top))) return null
+  // A candidate left out still vetoes a pick it out-votes three to one; one left out for fitting only under an alternate name vetoes only a pick nobody has heard of, or Doctor Who's fake working title would silence Torchwood.
+  const vetoes = (title: ImdbTitle) =>
+    votesOf(title) >= VOTES_DOMINANCE * votesOf(top) &&
+    (!title.aka || votesOf(top) < OPEN_RUN_MIN_VOTES)
+  if (dropped.some(vetoes)) return null
   if (ranked.length === 1) return top
   if (!query.type && new Set(pool.map((title) => imdbType(title.titleType))).size > 1) return null
   const next = ranked[1] as ImdbTitle

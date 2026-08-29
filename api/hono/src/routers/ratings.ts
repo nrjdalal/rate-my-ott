@@ -54,9 +54,9 @@ const asResponse = (row: Rating) => ({
 // What the newest rebuild wrote, or null while the index has never been built.
 const indexSchema = z
   .object({
-    akas: z.number().meta({ example: 56088 }),
+    akas: z.number().meta({ example: 41093 }),
     finishedAt: z.string().meta({ format: "date-time", example: "2026-08-29T14:33:00.000Z" }),
-    names: z.number().meta({ example: 775897 }),
+    names: z.number().meta({ example: 760902 }),
     titles: z.number().meta({ example: 619222 }),
   })
   .nullable()
