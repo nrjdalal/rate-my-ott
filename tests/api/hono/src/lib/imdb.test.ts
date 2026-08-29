@@ -15,6 +15,7 @@ import {
   parseRatingsLine,
   pickImdbTitle,
   readGzipLines,
+  resolveOutcome,
   resolveTitle,
   RUNTIME_MARGIN_MIN,
   searchKey,
@@ -749,6 +750,44 @@ describe("resolveTitle", () => {
         (s) => nested.get(s) ?? [],
         NOW,
       ),
+    ).toBeNull()
+  })
+})
+
+describe("resolveOutcome", () => {
+  const alpha = title({ id: "tt28363783", runtime: 141, startYear: 2025, votes: 24000 })
+  const wolf = title({ id: "tt6194322", runtime: 96, startYear: 2018, votes: 90000 })
+  const index = new Map<string, ImdbTitle[]>([
+    ["Alpha", [alpha, wolf]],
+    ["Brand New Film", [title({ id: "tt31000001", rating: null, startYear: 2026, votes: null })]],
+  ])
+  const lookup = (spelling: string) => index.get(spelling) ?? []
+
+  test("says why a query got no title", () => {
+    expect(resolveOutcome({ title: "Alpha", type: "movie" }, lookup, NOW)).toEqual({
+      reason: "unstated",
+      title: null,
+    })
+    expect(
+      resolveOutcome({ title: "Nothing Here", type: "movie", year: 2026 }, lookup, NOW),
+    ).toEqual({ reason: "unknown", title: null })
+    expect(resolveOutcome({ title: "Alpha", type: "series", year: 2026 }, lookup, NOW)).toEqual({
+      reason: "unmatched",
+      title: null,
+    })
+    expect(resolveOutcome({ title: "Alpha", type: "movie", year: 2018 }, lookup, NOW)).toEqual({
+      reason: null,
+      title: wolf,
+    })
+    const twin = title({ id: "tt2", runtime: null, startYear: 2025, votes: 20000 })
+    const ambiguous = (spelling: string) => (spelling === "Alpha" ? [alpha, twin] : [])
+    expect(resolveOutcome({ title: "Alpha", type: "movie", year: 2025 }, ambiguous, NOW)).toEqual({
+      reason: "ambiguous",
+      title: null,
+    })
+    expect(
+      resolveOutcome({ title: "Brand New Film", type: "movie", year: 2026 }, lookup, NOW).title
+        ?.rating,
     ).toBeNull()
   })
 })

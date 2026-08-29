@@ -16,7 +16,8 @@ source: local
 | A card's year, kind, and runtime, read from React's fiber props in the page's own world and stamped on the card as `data-rmo-*` | `entrypoints/netflix-entities.content.ts` (`world: "MAIN"`, no extension APIs) over `utils/netflix-props.ts` (pure; tested with a fake fiber chain) |
 | The scan loop: observe the page, batch titles, paint answers | `entrypoints/netflix.content.ts` |
 | The badge and panel styles injected into netflix.com | `assets/netflix.css` (every rule prefixed `rmo-`; no Tailwind, no reset, nothing that restyles the page) |
-| The only place that talks to the API, with a session cache; also answers the popup's index status (`api:index`) and the options page's probe (`api:health`) | `entrypoints/background.ts` |
+| The only place that talks to the API, with a session cache; also answers the popup's index status (`api:index`) and the options page's probe (`api:health`), and keeps the newest tab report (`page:report` in, `page:latest` out) | `entrypoints/background.ts` |
+| The popup's "why no score" list: a tab's misses grouped by the API's `reason`, phrased | `utils/report.ts` (pure; tested from `tests/extension/wxt/utils/report.test.ts`) |
 | The typed client and `unwrap` | `utils/api.ts` |
 | The message protocol between page, popup/options, and background | `utils/messages.ts` |
 | Settings (API URL, on/off switches), synced storage | `utils/settings.ts` |

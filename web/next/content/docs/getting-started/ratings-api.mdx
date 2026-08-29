@@ -31,6 +31,7 @@ Up to 50 titles per call. `type` (`movie` or `series`), `year`, and `runtime` (m
         "imdbVotes": 640123,
         "metascore": null,
         "poster": null,
+        "reason": null,
         "rottenTomatoes": null,
         "title": "Rick and Morty",
         "type": "series",
@@ -43,6 +44,7 @@ Up to 50 titles per call. `type` (`movie` or `series`), `year`, and `runtime` (m
         "imdbVotes": 12000,
         "metascore": null,
         "poster": null,
+        "reason": null,
         "rottenTomatoes": null,
         "title": "Alpha",
         "type": "movie",
@@ -53,7 +55,7 @@ Up to 50 titles per call. `type` (`movie` or `series`), `year`, and `runtime` (m
 }
 ```
 
-`title` and `year` in an answer are IMDb's, so a card that said 2026 can come back as 2025 (a regional release a year late). `metascore`, `poster`, and `rottenTomatoes` are always null: they are kept for one release so the v0.0.1 extension, which still reads them, does not paint "undefined". A title the index cannot match with certainty comes back with `found: false` and the IMDb fields null; a title it knows but nobody has rated yet comes back `found: true` with `imdbRating: null`. `GET /api/v1/ratings?title=Dune&year=2021` answers one title the same way, for a quick check from the browser or curl. The interactive reference at [`/api/docs`](/api/docs) has both.
+`title` and `year` in an answer are IMDb's, so a card that said 2026 can come back as 2025 (a regional release a year late). `metascore`, `poster`, and `rottenTomatoes` are always null: they are kept for one release so the v0.0.1 extension, which still reads them, does not paint "undefined". A title the index cannot match with certainty comes back with `found: false`, the IMDb fields null, and a `reason`: `unstated` (no year to check against), `unknown` (no IMDb title under any spelling of the name), `unmatched` (namesakes exist but none fits the stated kind, year, and runtime), or `ambiguous` (candidates fit but none is certain). A title it knows but nobody has rated yet comes back `found: true` with `imdbRating: null` and `reason: "unrated"`; with a score, `reason` is null. The extension's popup lists a tab's scoreless titles by these reasons. `GET /api/v1/ratings?title=Dune&year=2021` answers one title the same way, for a quick check from the browser or curl. The interactive reference at [`/api/docs`](/api/docs) has both.
 
 ## How a title is matched
 

@@ -5,7 +5,8 @@ import { browser } from "wxt/browser"
 import { SwitchRow } from "@/components/switch-row"
 import { useSettings } from "@/components/use-settings"
 import { compactCount, relativeTime } from "@/utils/format"
-import type { IndexReply, Message } from "@/utils/messages"
+import type { IndexReply, LatestReply, Message } from "@/utils/messages"
+import { groupMisses, summarize, type PageReport } from "@/utils/report"
 
 // What the popup says about the index: unknown while asking, then the API's answer or its failure.
 type Status = { state: "asking" } | { reply: IndexReply; state: "answered" }
@@ -13,8 +14,14 @@ type Status = { state: "asking" } | { reply: IndexReply; state: "answered" }
 export function App() {
   const [current, update] = useSettings()
   const [status, setStatus] = useState<Status>({ state: "asking" })
+  const [page, setPage] = useState<PageReport | null>(null)
 
   useEffect(() => {
+    const latest: Message = { type: "page:latest" }
+    browser.runtime
+      .sendMessage(latest)
+      .then((reply: LatestReply | undefined) => setPage(reply?.report ?? null))
+      .catch(() => setPage(null))
     const message: Message = { type: "api:index" }
     browser.runtime
       .sendMessage(message)
@@ -63,6 +70,25 @@ export function App() {
         </div>
       ) : (
         <p className="py-4 text-center text-xs text-neutral-500">Loading…</p>
+      )}
+      {page && (
+        <section aria-labelledby="page" className="mt-3 text-xs">
+          <h2 id="page" className="font-semibold text-neutral-700 dark:text-neutral-300">
+            This Netflix tab: {summarize(page)}
+          </h2>
+          {groupMisses(page.misses).map((group) => (
+            <details key={group.reason} className="mt-1 text-neutral-500">
+              <summary className="cursor-pointer">
+                {group.titles.length} {group.why}
+              </summary>
+              <ul className="mt-1 max-h-32 list-disc overflow-y-auto pl-4">
+                {group.titles.map((title) => (
+                  <li key={title}>{title}</li>
+                ))}
+              </ul>
+            </details>
+          ))}
+        </section>
       )}
       <p className="mt-3 text-xs text-neutral-500" role="status">
         {status.state === "asking" && "Checking the IMDb index…"}

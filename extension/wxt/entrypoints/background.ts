@@ -3,7 +3,8 @@ import { defineBackground } from "wxt/utils/define-background"
 import { storage } from "wxt/utils/storage"
 
 import { createApiClient, unwrap, type Rating, type TitleQuery } from "@/utils/api"
-import type { HealthReply, IndexReply, LookupReply, Message } from "@/utils/messages"
+import type { HealthReply, IndexReply, LatestReply, LookupReply, Message } from "@/utils/messages"
+import type { PageReport } from "@/utils/report"
 import { settings } from "@/utils/settings"
 
 // The only context that talks to the API: it holds the host permission that lets a cross-origin call skip CORS, and one place to batch and cache keeps every Netflix tab from asking twice.
@@ -65,12 +66,26 @@ async function indexStatus(): Promise<IndexReply> {
   return error ? { error: error.message, index: null } : { error: null, index: data.index }
 }
 
-const handle = (message: Message): Promise<HealthReply | IndexReply | LookupReply> =>
-  message.type === "api:health"
-    ? health()
-    : message.type === "api:index"
-      ? indexStatus()
-      : lookup(message.titles)
+// The newest report from any Netflix tab, in memory only: the popup shows it, and a service worker restart merely forgets it until the next paint.
+let latest: PageReport | null = null
+
+const handle = (
+  message: Message,
+): Promise<HealthReply | IndexReply | LatestReply | LookupReply> => {
+  switch (message.type) {
+    case "api:health":
+      return health()
+    case "api:index":
+      return indexStatus()
+    case "page:report":
+      latest = message.report
+      return Promise.resolve({ report: latest })
+    case "page:latest":
+      return Promise.resolve({ report: latest })
+    default:
+      return lookup(message.titles)
+  }
+}
 
 export default defineBackground(() => {
   browser.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {

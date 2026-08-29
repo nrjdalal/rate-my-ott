@@ -18,6 +18,7 @@ import {
   renderBillboardRating,
   renderPanel,
 } from "@/utils/netflix"
+import type { Miss, PageReport } from "@/utils/report"
 import { DEFAULT_SETTINGS, settings, type Settings } from "@/utils/settings"
 
 // How long to collect newly seen titles before asking for them in one batch, and how often to rescan regardless of mutations (Netflix swaps artwork and virtualizes rows without always mutating what the observer watches).
@@ -37,6 +38,9 @@ export default defineContentScript({
   async main(ctx) {
     let current: Settings = await settings.getValue()
     const answers = new Map<string, Rating | null>()
+    // What this tab asked about, by query key, for the popup's "why no score" list.
+    const asked = new Map<string, TitleQuery>()
+    let reported = ""
     const failedAt = new Map<string, number>()
     const inflight = new Set<string>()
     const pending = new Map<string, TitleQuery>()
@@ -54,6 +58,32 @@ export default defineContentScript({
         scheduleFlush()
       }
       return undefined
+    }
+
+    // After a paint, tell the background what this tab knows, when it changed: the titles with a score, and the ones without and why.
+    const report = () => {
+      let rated = 0
+      const misses: Miss[] = []
+      for (const [key, query] of asked) {
+        const rating = answers.get(key)
+        if (rating === undefined) continue
+        if (rating && rating.imdbRating !== null) rated += 1
+        else {
+          const miss: Miss = {
+            reason: rating?.reason ?? (rating ? "unrated" : "unknown"),
+            title: query.title,
+          }
+          // The request type accepts anything coercible for the year; only a number is worth listing.
+          if (typeof query.year === "number") miss.year = query.year
+          misses.push(miss)
+        }
+      }
+      const next: PageReport = { misses, rated }
+      const serialized = JSON.stringify(next)
+      if (serialized === reported) return
+      reported = serialized
+      const message: Message = { report: next, type: "page:report" }
+      browser.runtime.sendMessage(message).catch(() => undefined)
     }
 
     const paint = () => {
@@ -75,6 +105,7 @@ export default defineContentScript({
           }
           const rating = ask(query)
           const key = keyOf(query)
+          asked.set(key, query)
           if (rating !== undefined && !hasBadge(card, key)) renderBadge(card, rating, key)
         }
       }
@@ -94,6 +125,7 @@ export default defineContentScript({
           renderPanel(modal.anchor, rating, key)
         }
       }
+      report()
     }
 
     const flush = async () => {

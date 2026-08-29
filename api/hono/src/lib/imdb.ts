@@ -287,21 +287,36 @@ export function pickImdbTitle(
   return null
 }
 
+// Why a query got no title, for the extension to explain a bare card: no year to check against, no candidate under any spelling, candidates that fit nothing stated, or candidates that fit but none certain.
+export const MISS_REASONS = ["ambiguous", "unknown", "unmatched", "unstated"] as const
+export type MissReason = (typeof MISS_REASONS)[number]
+export type Outcome = { reason: MissReason | null; title: ImdbTitle | null }
+
 // The title the index holds for a query, spelling by spelling (as the platform wrote it, then without a parenthetical qualifier, then without a subtitle after a colon), stopping at the first spelling any candidate fits: what fits under the platform's own spelling is either the answer or an ambiguity, never a reason to try a looser one. The unsubtitled spelling names a parent or a namesake as easily as the title, so it is taken only for the stated year exactly.
-export function resolveTitle(
+export function resolveOutcome(
   query: TitleQuery,
   candidatesFor: (spelling: string) => ImdbTitle[],
   now?: number,
-): ImdbTitle | null {
+): Outcome {
+  if (!query.year) return { reason: "unstated", title: null }
+  let known = false
   for (const { loose, spelling } of titleSpellings(query.title)) {
     const candidates = candidatesFor(spelling)
     if (candidates.length === 0) continue
+    known = true
     const options: MatchOptions = { exactYear: loose, now }
     if (!candidates.some((candidate) => fitsQuery(candidate, query, options))) continue
-    return pickImdbTitle(candidates, query, options)
+    const title = pickImdbTitle(candidates, query, options)
+    return { reason: title ? null : "ambiguous", title }
   }
-  return null
+  return { reason: known ? "unmatched" : "unknown", title: null }
 }
+
+export const resolveTitle = (
+  query: TitleQuery,
+  candidatesFor: (spelling: string) => ImdbTitle[],
+  now?: number,
+): ImdbTitle | null => resolveOutcome(query, candidatesFor, now).title
 
 // The name rows a title no longer answers to, once its spellings are rewritten: what the index holds for it that the fresh spellings do not.
 export const staleNames = <T extends { key: string; titleId: string }>(

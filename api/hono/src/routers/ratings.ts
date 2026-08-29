@@ -4,6 +4,7 @@ import { describeRoute, resolver } from "hono-openapi"
 import { z } from "zod"
 
 import { ApiError, indexErrorResponses, validationErrorResponses } from "@/lib/error"
+import { MISS_REASONS } from "@/lib/imdb"
 import { TITLE_TYPES } from "@/lib/lookup"
 import { indexStatus, lookupRatings, type Rating } from "@/lib/ratings"
 
@@ -31,6 +32,11 @@ const ratingSchema = z.object({
   imdbVotes: z.number().nullable().meta({ example: 640000 }),
   metascore: z.null(),
   poster: z.null(),
+  // Why there is no score: a miss's cause, or "unrated" for a title IMDb lists but nobody has rated yet; null with a score.
+  reason: z
+    .enum([...MISS_REASONS, "unrated"])
+    .nullable()
+    .meta({ example: null }),
   rottenTomatoes: z.null(),
   title: z.string().meta({ example: "Rick and Morty" }),
   type: z.enum(["movie", "series", "unknown"]).meta({ example: "series" }),
@@ -45,6 +51,7 @@ const asResponse = (row: Rating) => ({
   imdbVotes: row.imdbVotes,
   metascore: null,
   poster: null,
+  reason: row.reason,
   rottenTomatoes: null,
   title: row.title,
   type: row.type,

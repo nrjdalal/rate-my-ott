@@ -55,6 +55,7 @@ const rating = (overrides: Partial<Rating> = {}): Rating => ({
   imdbVotes: 640123,
   metascore: null,
   poster: null,
+  reason: null,
   rottenTomatoes: null,
   title: "Rick and Morty",
   type: "series",

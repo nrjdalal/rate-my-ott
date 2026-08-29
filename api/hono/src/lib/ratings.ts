@@ -2,7 +2,14 @@ import { db, imdbName, imdbSync, imdbTitle } from "@packages/db"
 import { desc, eq, inArray } from "drizzle-orm"
 
 import { ApiError } from "@/lib/error"
-import { imdbType, resolveTitle, searchKey, type ImdbTitle } from "@/lib/imdb"
+import {
+  imdbType,
+  resolveOutcome,
+  searchKey,
+  type ImdbTitle,
+  type MissReason,
+  type Outcome,
+} from "@/lib/imdb"
 import {
   alignTo,
   titleVariants,
@@ -11,12 +18,13 @@ import {
   type TitleType,
 } from "@/lib/lookup"
 
-// One answer: the title the index matched, or a miss that still says what was asked.
+// One answer: the title the index matched, or a miss that still says what was asked and why it missed. A found title nobody has rated yet says "unrated".
 export type Rating = {
   found: boolean
   imdbId: string | null
   imdbRating: number | null
   imdbVotes: number | null
+  reason: MissReason | "unrated" | null
   title: string
   type: TitleType | "unknown"
   year: number | null
@@ -43,13 +51,14 @@ async function imdbCandidates(queries: TitleQuery[]): Promise<Map<string, ImdbTi
 }
 
 // A miss keeps the asked-for title, year, and type, so the answer still says what was looked up.
-const toRating = (query: TitleQuery, title: ImdbTitle | null): Rating =>
+const toRating = (query: TitleQuery, { reason, title }: Outcome): Rating =>
   title
     ? {
         found: true,
         imdbId: title.id,
         imdbRating: title.rating,
         imdbVotes: title.votes,
+        reason: title.rating === null ? "unrated" : null,
         title: title.primaryTitle,
         type: imdbType(title.titleType) ?? "unknown",
         year: title.startYear,
@@ -59,6 +68,7 @@ const toRating = (query: TitleQuery, title: ImdbTitle | null): Rating =>
         imdbId: null,
         imdbRating: null,
         imdbVotes: null,
+        reason,
         title: query.title.trim(),
         type: query.type ?? "unknown",
         year: query.year ?? null,
@@ -81,7 +91,7 @@ export async function lookupRatings(queries: TitleQuery[]): Promise<Rating[]> {
       key,
       toRating(
         query,
-        resolveTitle(query, (spelling) => index.get(searchKey(spelling)) ?? []),
+        resolveOutcome(query, (spelling) => index.get(searchKey(spelling)) ?? []),
       ),
     ]),
   )
