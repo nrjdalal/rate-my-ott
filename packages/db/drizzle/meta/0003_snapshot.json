@@ -1,5 +1,5 @@
 {
-  "id": "f0e27930-91cb-4136-b45e-f179496fca65",
+  "id": "1bde8793-4c58-4de5-a6f7-fb32952d694a",
   "prevId": "05016fd5-8f16-4a4a-beb7-c28f6aa47497",
   "version": "7",
   "dialect": "postgresql",
@@ -8,6 +8,13 @@
       "name": "imdb_name",
       "schema": "",
       "columns": {
+        "aka": {
+          "name": "aka",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "key": {
           "name": "key",
           "type": "text",

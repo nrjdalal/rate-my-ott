@@ -112,6 +112,27 @@ describe("readCard", () => {
     expect(readCard(empty as Element)).toBeNull()
   })
 
+  test("a stamp that names another id or label is no stamp: the card is pending again", () => {
+    const doc = page(CARDS)
+    const [standard] = findCards(doc)
+    standard?.setAttribute("data-rmo-id", "999")
+    expect(readCard(standard as Element)).toEqual({
+      id: "81616273",
+      pending: true,
+      title: "Operation Safed Sagar: The Untold Story of the Kargil War",
+    })
+    const modal = page(MODAL)
+    const similar = findCards(modal).find(
+      (c) => c.getAttribute("data-uia") === "titleCard--container",
+    ) as Element
+    similar.setAttribute("data-rmo-title", "Someone Else")
+    expect(readCard(similar)).toEqual({
+      id: "Little Brother",
+      pending: true,
+      title: "Little Brother",
+    })
+  })
+
   test("a ranked card hosts its badge on the artwork wrapper, not the rank numeral or the anchor", () => {
     const doc = page(CARDS)
     const ranked = findCards(doc)[1] as Element
@@ -153,9 +174,9 @@ describe("renderBadge", () => {
 })
 
 const BILLBOARD = `
-<section data-uia="billboard" data-rmo-meta data-rmo-id="70184207" data-rmo-title="Shameless (U.S.)" data-rmo-year="2011" data-rmo-type="series">
+<section data-uia="billboard" data-rmo-meta data-rmo-id="70184207" data-rmo-title="Shameless (U.S.)" data-rmo-year="2011" data-rmo-type="series" data-rmo-runtime="45">
   <div data-uia="billboard-title"><img alt="LOGO|abc" data-uia="billboard-logo">
-    <div data-uia="attributes-elements"><span class="e1">Series</span><p aria-hidden="true" class="sep">•</p><span class="e1">Drama</span><p aria-hidden="true" class="sep">•</p><span class="e1">2011</span></div>
+    <div data-uia="attributes-elements"><span class="e1" data-uia="kind">Series</span><p aria-hidden="true" class="sep" id="sep-1">•</p><span class="e1">Drama</span><p aria-hidden="true" class="sep">•</p><span class="e1">2011</span><p aria-hidden="true" class="sep">•</p><span class="maturity">A</span></div>
   </div>
 </section>
 `
@@ -164,19 +185,27 @@ describe("readBillboard and renderBillboardRating", () => {
   test("reads the stamped billboard and joins its metadata line in its own markup", () => {
     const doc = page(BILLBOARD + CARDS)
     const billboard = readBillboard(doc)
-    expect(billboard?.query).toEqual({ title: "Shameless (U.S.)", type: "series", year: 2011 })
+    expect(billboard?.query).toEqual({
+      runtime: 45,
+      title: "Shameless (U.S.)",
+      type: "series",
+      year: 2011,
+    })
     expect(billboard?.anchor.getAttribute("data-uia")).toBe("attributes-elements")
     renderBillboardRating(billboard!.anchor, rating({ imdbRating: 8.5, imdbVotes: 300000 }))
     renderBillboardRating(billboard!.anchor, rating({ imdbRating: 8.5, imdbVotes: 300000 }))
     const added = [...billboard!.anchor.querySelectorAll(".rmo-panel")]
     expect(added.map((n) => n.tagName + ":" + n.textContent)).toEqual(["P:•", "SPAN:IMDb 8.5"])
     expect(added[0]?.classList.contains("sep")).toBe(true)
+    expect(added[0]?.hasAttribute("id")).toBe(false)
     expect(added[1]?.classList.contains("e1")).toBe(true)
+    expect(added[1]?.classList.contains("maturity")).toBe(false)
+    expect(added[1]?.hasAttribute("data-uia")).toBe(false)
     expect(added[1]?.getAttribute("title")).toBe("300K votes on IMDb")
     expect(hasBillboardRating(billboard!.anchor)).toBe(true)
     renderBillboardRating(billboard!.anchor, rating({ found: false }))
     expect(hasBillboardRating(billboard!.anchor)).toBe(false)
-    expect(billboard!.anchor.textContent).toBe("Series•Drama•2011")
+    expect(billboard!.anchor.textContent).toBe("Series•Drama•2011•A")
   })
 
   test("an unstamped billboard, or one without a metadata line, is nothing to ask about", () => {

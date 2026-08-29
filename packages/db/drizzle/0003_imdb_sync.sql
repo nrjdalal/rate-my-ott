@@ -7,3 +7,5 @@ CREATE TABLE "imdb_sync" (
 	"pruned" integer NOT NULL,
 	"titles" integer NOT NULL
 );
+--> statement-breakpoint
+ALTER TABLE "imdb_name" ADD COLUMN "aka" boolean DEFAULT false NOT NULL;

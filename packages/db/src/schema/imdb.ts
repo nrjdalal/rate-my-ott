@@ -1,4 +1,5 @@
 import {
+  boolean,
   doublePrecision,
   index,
   integer,
@@ -21,10 +22,11 @@ export const imdbTitle = pgTable("imdb_title", {
   votes: integer("votes"),
 })
 
-// The spellings a title answers to, one row each (its primary and original names today, localized names later), keyed by the API's search normalization so a lookup is one indexed equality. The composite key doubles as the lookup index; the title index serves the cascade when a title leaves the dataset.
+// The spellings a title answers to, one row each (its primary and original names, and for a well-known title the alternate names IMDb displays), keyed by the API's search normalization so a lookup is one indexed equality. `aka` marks an alternate name: a title matched only through one yields to any title that fits under its own name. The composite key doubles as the lookup index; the title index serves the cascade when a title leaves the dataset.
 export const imdbName = pgTable(
   "imdb_name",
   {
+    aka: boolean("aka").default(false).notNull(),
     key: text("key").notNull(),
     titleId: text("title_id")
       .notNull()

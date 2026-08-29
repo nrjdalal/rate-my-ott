@@ -48,14 +48,19 @@ export function readCard(card: Element): CardInfo | null {
   if (!title) return null
   const href = anchor?.getAttribute("href") ?? ""
   const match = href.match(/(?:\/watch\/|\/title\/|[?&]jbv=)(\d+)/)
-  const stamped = card.hasAttribute(STAMP)
+  // A stamp counts only while it names this card: React recycles a card element for another title, and the MAIN-world script re-stamps it on its next scan.
   const stampedId = card.getAttribute("data-rmo-id")
+  const stampedTitle = card.getAttribute("data-rmo-title")
+  const stamped =
+    card.hasAttribute(STAMP) &&
+    (stampedId === null || !match || stampedId === match[1]) &&
+    (stampedTitle === null || stampedTitle === title)
   return {
-    id: stampedId ?? (match ? (match[1] as string) : title),
+    id: (stamped && stampedId) || (match ? (match[1] as string) : title),
     // Any card the page identifies (a jbv or /watch/ link, or a labelled modal card) gets a stamp from its React props; only a bare label has nothing to wait for.
     pending: !stamped && (match !== null || card.matches("[data-uia='titleCard--container']")),
     title,
-    ...stampedMeta(card),
+    ...(stamped ? stampedMeta(card) : {}),
   }
 }
 
@@ -248,6 +253,7 @@ export function readBillboard(root: ParentNode): BillboardInfo | null {
     anchor: line,
     query: {
       title,
+      ...(meta.runtime ? { runtime: meta.runtime } : {}),
       ...(meta.type ? { type: meta.type } : {}),
       ...(meta.year ? { year: meta.year } : {}),
     },
@@ -261,14 +267,18 @@ export const hasBillboardRating = (anchor: HTMLElement): boolean =>
 export function renderBillboardRating(anchor: HTMLElement, rating: Rating | null): void {
   for (const node of anchor.querySelectorAll(`:scope > .${PANEL}`)) node.remove()
   if (!rating || !rating.found || rating.imdbRating === null) return
+  // Cloned from the first item (the "Series" or "Film" label), not the last: the line ends with the maturity rating, whose box is not the look wanted. A clone keeps no id or data-uia, which name Netflix's own nodes.
   const items = [...anchor.children]
   const separator = items.find((node) => node.getAttribute("aria-hidden") === "true")
-  const item = [...items].reverse().find((node) => node.getAttribute("aria-hidden") !== "true")
+  const item = items.find((node) => node.getAttribute("aria-hidden") !== "true")
   if (!item) return
   const dot = (separator ?? item).cloneNode(true) as HTMLElement
   const score = item.cloneNode(false) as HTMLElement
-  dot.classList.add(PANEL)
-  score.classList.add(PANEL)
+  for (const node of [dot, score]) {
+    node.removeAttribute("id")
+    node.removeAttribute("data-uia")
+    node.classList.add(PANEL)
+  }
   score.textContent = `IMDb ${oneDecimal(rating.imdbRating)}`
   score.setAttribute(
     "title",

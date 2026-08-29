@@ -30,13 +30,13 @@ async function imdbCandidates(queries: TitleQuery[]): Promise<Map<string, ImdbTi
   const found = new Map<string, ImdbTitle[]>()
   if (keys.length === 0) return found
   const rows = await db
-    .select({ key: imdbName.key, title: imdbTitle })
+    .select({ aka: imdbName.aka, key: imdbName.key, title: imdbTitle })
     .from(imdbName)
     .innerJoin(imdbTitle, eq(imdbName.titleId, imdbTitle.id))
     .where(inArray(imdbName.key, keys))
   for (const row of rows) {
     const list = found.get(row.key) ?? []
-    list.push(row.title)
+    list.push({ ...row.title, aka: row.aka })
     found.set(row.key, list)
   }
   return found

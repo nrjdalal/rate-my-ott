@@ -87,7 +87,7 @@ function fromVideoModel(model: Record<string, unknown>): Entity | null {
 }
 
 // The video id the card's own link names (jbv= today, /watch/ or /title/ before), which any props met on the way up must agree with: a row, a billboard, or a modal above the card carries a model of its own.
-const linkedId = (card: Element): number | undefined => {
+export const linkedId = (card: Element): number | undefined => {
   const href =
     (card.matches("a[href]") ? card : card.querySelector("a[href]"))?.getAttribute("href") ?? ""
   const match = href.match(/(?:\/watch\/|\/title\/|[?&]jbv=)(\d+)/)
@@ -96,8 +96,13 @@ const linkedId = (card: Element): number | undefined => {
 
 // Walk up from a card (or a modal): a videoModel for the card's own id is the whole answer; otherwise the first props with the card's videoId are the card's, the first section fragment with entity edges is the row's, and the edge whose entity has the card's videoId names the year and kind. Null when the element has no fiber or no card above it.
 export function readEntity(card: Element, maxDepth = 40): Entity | null {
+  // A card with a link owns the records that name its id; a link-less one (a modal's "More Like This" card) the records that name its label, so a modal's own model above the row never stamps the cards beneath it; a modal itself, with neither, owns the record it finds.
   const linked = linkedId(card)
-  const owns = (id: number) => linked === undefined || id === linked
+  const label = card.getAttribute("aria-label")?.trim().toLowerCase()
+  const owns = (entity: Entity) =>
+    linked !== undefined
+      ? entity.videoId === linked
+      : label === undefined || entity.title.trim().toLowerCase() === label
   let videoId: number | undefined
   let title: string | undefined
   let edges: unknown[] | undefined
@@ -113,13 +118,18 @@ export function readEntity(card: Element, maxDepth = 40): Entity | null {
           : undefined
       if (model) {
         const legacy = fromVideoModel(model)
-        if (legacy && owns(legacy.videoId)) return legacy
+        if (legacy && owns(legacy)) return legacy
       }
       if (isRecord(props.video)) {
         const similar = fromVideo(props.video)
-        if (similar && owns(similar.videoId)) return similar
+        if (similar && owns(similar)) return similar
       }
-      if (videoId === undefined && typeof props.videoId === "number" && owns(props.videoId)) {
+      if (
+        videoId === undefined &&
+        typeof props.videoId === "number" &&
+        linked !== undefined &&
+        props.videoId === linked
+      ) {
         videoId = props.videoId
         if (typeof props.title === "string") title = props.title
       }
@@ -148,7 +158,8 @@ export function readEntity(card: Element, maxDepth = 40): Entity | null {
 }
 
 // The billboard (the hero at the top of a browse page) names its title only as a logo image, but its props carry the play button's entity { videoId, __typename, releaseYear } and a title string such as "Shameless (U.S.), Season 1" or "His & Hers, Limited Series", whose suffix names what is promoted, not the show. Null when the section has no fiber or no such props above it.
-const PROMOTED_SUFFIX = /[,:]\s*(?:Season|Part|Volume|Chapter)\s+\d+$|,\s*Limited Series$/i
+// Netflix writes the promoted part after a comma ("Shameless (U.S.), Season 1", "His & Hers, Limited Series"); a film keeps its whole name, since "Friday the 13th: Part 2" and "John Wick: Chapter 4" are names, not promotions.
+const PROMOTED_SUFFIX = /,\s*(?:(?:Season|Part|Volume|Chapter)\s+\d+|Limited Series)$/i
 
 export function readBillboard(section: Element, maxDepth = 30): Entity | null {
   let fiber = fiberOf(section)
@@ -160,7 +171,11 @@ export function readBillboard(section: Element, maxDepth = 30): Entity | null {
         const entity = press && isRecord(press.unifiedEntity) ? press.unifiedEntity : undefined
         if (entity && typeof entity.videoId === "number") {
           const read = fromVideo(entity)
-          if (read) return { ...read, title: props.title.replace(PROMOTED_SUFFIX, "").trim() }
+          if (read) {
+            const title =
+              read.type === "series" ? props.title.replace(PROMOTED_SUFFIX, "") : props.title
+            return { ...read, title: title.trim() }
+          }
         }
       }
     }

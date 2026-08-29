@@ -39,7 +39,7 @@ jobs:
           # one per browser, named by the release version wxt reads from the root package.json
           # the release page also lists GitHub's automatic "Source code" archives, so the notes say which asset is the extension
           install_notes() {
-            printf '### 📦 Install\n\nDownload `rate-my-ott-%s-chrome.zip` (Chrome, Edge, Brave) or `rate-my-ott-%s-firefox.zip` from the assets below, not the "Source code" archives. Unzip it and load the folder from `chrome://extensions` with Developer mode on: https://rate-my-ott.vercel.app/docs/getting-started/install\n' "${1#v}" "${1#v}"
+            printf '### 📦 Install\n\nDownload `rate-my-ott-%s-chrome.zip` (Chrome, Edge, Brave) or `rate-my-ott-%s-firefox.zip` from the assets below (`rate-my-ott-chrome.zip` and `rate-my-ott-firefox.zip` are the same builds under stable names), not the "Source code" archives. Unzip it and load the folder from `chrome://extensions` with Developer mode on: https://rate-my-ott.vercel.app/docs/getting-started/install\n' "${1#v}" "${1#v}"
           }
           attach_extension() {
             (cd extension/wxt && export WXT_PUBLIC_API_URL="${{ vars.WXT_PUBLIC_API_URL }}" && bun run zip && bun run zip:firefox)

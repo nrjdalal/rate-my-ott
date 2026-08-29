@@ -3,6 +3,7 @@ import { env } from "@packages/env/api-hono"
 import { count, sql } from "drizzle-orm"
 
 import {
+  addAka,
   AKA_MIN_VOTES,
   keepAka,
   keepTitle,
@@ -11,12 +12,12 @@ import {
   parseBasicsLine,
   parseRatingsLine,
   readGzipLines,
-  searchKey,
   shouldPrune,
   staleNames,
   toImdbTitle,
   type ImdbRating,
   type ImdbTitle,
+  type Spellings,
 } from "@/lib/imdb"
 
 // Rebuilds the IMDb index from IMDb's daily datasets: every kept title is upserted (only rows that changed are written), its spellings (primary and original name, plus the alternate names a well-known title is displayed under) are added and the ones it no longer answers to are dropped, and titles that left the dataset are pruned. Run by the nightly workflow and by hand (`bun run imdb:sync`); safe to rerun, and a rerun on unchanged data writes nothing.
@@ -58,7 +59,7 @@ type Name = typeof imdbName.$inferInsert
 const TITLE_RECORD = sql.raw(
   't("endYear" integer, id text, "originalTitle" text, "primaryTitle" text, rating double precision, runtime integer, "startYear" integer, "titleType" text, votes integer)',
 )
-const NAME_RECORD = sql.raw('t(key text, "titleId" text)')
+const NAME_RECORD = sql.raw('t(aka boolean, key text, "titleId" text)')
 
 async function flushTitles(tx: Transaction, titles: ImdbTitle[]) {
   if (titles.length === 0) return
@@ -80,13 +81,13 @@ async function flushTitles(tx: Transaction, titles: ImdbTitle[]) {
 async function flushNames(tx: Transaction, ids: string[], names: Name[]) {
   if (names.length > 0) {
     await tx.execute(sql`
-      insert into imdb_name (key, title_id)
-      select t.key, t."titleId" from json_to_recordset(${JSON.stringify(names)}::text::json) as ${NAME_RECORD}
-      on conflict do nothing
+      insert into imdb_name (aka, key, title_id)
+      select t.aka, t.key, t."titleId" from json_to_recordset(${JSON.stringify(names)}::text::json) as ${NAME_RECORD}
+      on conflict (key, title_id) do update set aka = excluded.aka where imdb_name.aka is distinct from excluded.aka
     `)
   }
   const existing = await tx.execute<Name>(sql`
-    select key, title_id as "titleId" from imdb_name
+    select aka, key, title_id as "titleId" from imdb_name
     where title_id in (select json_array_elements_text(${JSON.stringify(ids)}::text::json))
   `)
   const stale = staleNames([...existing] as Name[], names)
@@ -124,61 +125,66 @@ const countTitles = async (tx: Transaction) => {
   return row?.count ?? 0
 }
 
-// One rebuild is one transaction: a night either lands whole or not at all (a failed download or a refused prune leaves the previous index serving), and the connection it holds is the one place the session setting has to land. Without parallel workers, because on Neon's smallest compute a parallel scan cannot allocate its dynamic shared memory ("could not resize shared memory segment") once the table has grown, while a serial scan of it takes a second.
-async function rebuild(tx: Transaction, started: number) {
-  await tx.execute(sql`set local max_parallel_workers_per_gather = 0`)
+// Everything the datasets say, read and parsed before any connection is held: the writes run in one transaction, and the database client closes a connection idle for thirty seconds, which streaming the alternate names alone would exceed.
+type Dump = {
+  akas: number
+  popular: number
+  read: number
+  spellings: Spellings
+  titles: ImdbTitle[]
+}
+
+async function readDatasets(started: number): Promise<Dump> {
   const year = new Date().getUTCFullYear()
-  const before = await countTitles(tx)
   const ratings = await loadRatings()
   log(`${ratings.size} ratings read in ${seconds(started)}`)
-
-  const seen = new Set<number>()
-  // Every kept title's spellings, filled from the basics and then from the alternate names, and written once both are known so the stale-name diff sees the whole set.
-  const keys = new Map<string, string[]>()
+  const titles: ImdbTitle[] = []
+  const spellings: Spellings = new Map()
   const popular = new Set<number>()
   let read = 0
-  let kept = 0
-  let titles: ImdbTitle[] = []
   for await (const line of await open("title.basics.tsv.gz")) {
     read += 1
-    if (read % 1_000_000 === 0) log(`${read} rows read, ${kept} kept, ${seconds(started)}`)
+    if (read % 1_000_000 === 0) log(`${read} rows read, ${titles.length} kept, ${seconds(started)}`)
     const basics = parseBasicsLine(line)
     if (!basics) continue
     const rating = ratings.get(numericId(basics.id)) ?? null
     if (!keepTitle(basics, rating, year)) continue
-    kept += 1
-    if (kept > MAX_TITLES) {
+    if (titles.length >= MAX_TITLES) {
       throw new Error(`more than ${MAX_TITLES} titles kept, refusing to grow the index`)
     }
-    seen.add(numericId(basics.id))
     titles.push(toImdbTitle(basics, rating))
-    keys.set(basics.id, nameKeys(basics))
+    spellings.set(basics.id, { akas: [], own: nameKeys(basics) })
     if (rating !== null && rating.votes >= AKA_MIN_VOTES) popular.add(numericId(basics.id))
-    if (titles.length >= BATCH) {
-      await flushTitles(tx, titles)
-      titles = []
-    }
   }
-  await flushTitles(tx, titles)
-  log(`${read} rows read, ${kept} titles kept and written in ${seconds(started)}`)
-
+  log(`${read} rows read, ${titles.length} titles kept in ${seconds(started)}`)
   let akas = 0
   for await (const line of await open("title.akas.tsv.gz")) {
     const aka = parseAkasLine(line)
-    if (!aka || !popular.has(numericId(aka.id)) || !keepAka(aka)) continue
-    const key = searchKey(aka.title)
-    const known = keys.get(aka.id)
-    if (!key || !known || known.includes(key)) continue
-    known.push(key)
-    akas += 1
+    if (aka && popular.has(numericId(aka.id)) && keepAka(aka) && addAka(spellings, aka)) akas += 1
   }
-  log(`${akas} alternate names added for ${popular.size} well-known titles, ${seconds(started)}`)
+  log(`${akas} alternate names read for ${popular.size} well-known titles, ${seconds(started)}`)
+  return { akas, popular: popular.size, read, spellings, titles }
+}
 
+// One rebuild is one transaction: a night either lands whole or not at all (a refused prune leaves the previous index serving), and the connection it holds is the one place the session setting has to land. Without parallel workers, because on Neon's smallest compute a parallel scan cannot allocate its dynamic shared memory ("could not resize shared memory segment") once the table has grown, while a serial scan of it takes a second.
+async function writeIndex(tx: Transaction, dump: Dump, started: number): Promise<number> {
+  await tx.execute(sql`set local max_parallel_workers_per_gather = 0`)
+  const before = await countTitles(tx)
+  const seen = new Set<number>()
+  for (let offset = 0; offset < dump.titles.length; offset += BATCH) {
+    const batch = dump.titles.slice(offset, offset + BATCH)
+    for (const title of batch) seen.add(numericId(title.id))
+    await flushTitles(tx, batch)
+  }
+  log(`${dump.titles.length} titles written in ${seconds(started)}`)
   let ids: string[] = []
   let names: Name[] = []
-  for (const [id, spellings] of keys) {
+  let count = 0
+  for (const [id, { akas, own }] of dump.spellings) {
     ids.push(id)
-    for (const key of spellings) names.push({ key, titleId: id })
+    for (const key of own) names.push({ aka: false, key, titleId: id })
+    for (const key of akas) names.push({ aka: true, key, titleId: id })
+    count += own.length + akas.length
     if (ids.length >= BATCH) {
       await flushNames(tx, ids, names)
       ids = []
@@ -186,24 +192,23 @@ async function rebuild(tx: Transaction, started: number) {
     }
   }
   await flushNames(tx, ids, names)
-  log(`${keys.size} titles' spellings written in ${seconds(started)}`)
-  if (!shouldPrune(before, kept)) {
-    throw new Error(`only ${kept} titles kept against ${before} indexed, refusing to prune`)
+  log(`${count} spellings of ${dump.spellings.size} titles written in ${seconds(started)}`)
+  if (!shouldPrune(before, dump.titles.length)) {
+    throw new Error(
+      `only ${dump.titles.length} titles kept against ${before} indexed, refusing to prune`,
+    )
   }
   const pruned = await prune(tx, seen)
-  // The record of this rebuild lands with it, so the newest row always describes the index that is serving.
-  let spellings = 0
-  for (const list of keys.values()) spellings += list.length
   // One record a night is all the history worth keeping; older ones go so the table never grows past a season.
   await tx.execute(sql`delete from imdb_sync where finished_at < now() - interval '90 days'`)
   // Stamped from here, not by the database default: now() inside the transaction is when it began, a minute or two earlier.
   await tx.insert(imdbSync).values({
-    akas,
+    akas: dump.akas,
     durationMs: Math.round(performance.now() - started),
     finishedAt: new Date(),
-    names: spellings,
+    names: count,
     pruned,
-    titles: kept,
+    titles: dump.titles.length,
   })
   return pruned
 }
@@ -211,7 +216,8 @@ async function rebuild(tx: Transaction, started: number) {
 async function main() {
   const started = performance.now()
   log(`source ${env.IMDB_DATASETS_URL}`)
-  const pruned = await db.transaction((tx) => rebuild(tx, started))
+  const dump = await readDatasets(started)
+  const pruned = await db.transaction((tx) => writeIndex(tx, dump, started))
   log(`${pruned} titles pruned; ${await sizes()}; done in ${seconds(started)}`)
 }
 

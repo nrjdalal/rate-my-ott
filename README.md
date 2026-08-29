@@ -25,7 +25,7 @@ Types flow from the API to both clients: the extension and the web app call it t
 # install, migrate (POSTGRES_URL is set by `zerostarter init`, or set it yourself), build the IMDb index, run
 bun install
 bun run db:migrate
-bun run imdb:sync   # ~235 MB from IMDb, under a minute
+bun run imdb:sync   # ~750 MB from IMDb, a minute or two
 bun run dev
 ```
 

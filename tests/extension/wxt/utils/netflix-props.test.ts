@@ -137,11 +137,11 @@ describe("readEntity", () => {
     expect(readEntity(legacy({ title: "X" }))).toBeNull()
   })
 
-  // A card in the modal's "More Like This" row: no link, a video record in its props with the show's latest season as its year.
-  test("a modal card reads its video record, taking a show's latest year and a film's display runtime", () => {
-    const modalCard = (video: Record<string, unknown>) => {
+  // A card in the modal's "More Like This" row: no link, a video record in its props with the show's latest season as its year; the record must name the card, or it is the modal's own above the row.
+  test("a modal card reads the video record that names it, taking a show's latest year and a film's display runtime", () => {
+    const modalCard = (label: string, video: Record<string, unknown>) => {
       const window = new Window({ url: "https://www.netflix.com/browse?jbv=1" })
-      window.document.body.innerHTML = `<div data-uia="titleCard--container" aria-label="Little Brother"><div class="titleCard-imageWrapper"><img alt=""></div></div>`
+      window.document.body.innerHTML = `<div data-uia="titleCard--container" aria-label="${label}"><div class="titleCard-imageWrapper"><img alt=""></div></div>`
       const card = window.document.querySelector("div") as unknown as Element
       ;(card as unknown as Record<string, unknown>)["__reactFiber$m"] = {
         memoizedProps: { role: "button" },
@@ -151,7 +151,7 @@ describe("readEntity", () => {
     }
     expect(
       readEntity(
-        modalCard({
+        modalCard("Little Brother", {
           __typename: "Movie",
           displayRuntimeSec: 6047,
           latestYear: 2026,
@@ -168,7 +168,7 @@ describe("readEntity", () => {
     })
     expect(
       readEntity(
-        modalCard({
+        modalCard("A Show", {
           __typename: "Show",
           displayRuntimeSec: 3000,
           latestYear: 2025,
@@ -182,7 +182,18 @@ describe("readEntity", () => {
       videoId: 7,
       year: 2025,
     })
-    expect(readEntity(modalCard({ title: "No id" }))).toBeNull()
+    // The modal's own model above the row names another title: not this card's.
+    expect(
+      readEntity(
+        modalCard("Little Brother", {
+          __typename: "Movie",
+          latestYear: 2026,
+          title: "72 HOURS",
+          videoId: 81715790,
+        }),
+      ),
+    ).toBeNull()
+    expect(readEntity(modalCard("No id", { title: "No id" }))).toBeNull()
   })
 
   test("the billboard reads its play button's entity and drops the promoted season from the title", () => {
@@ -222,22 +233,25 @@ describe("readEntity", () => {
     expect(readBillboard(section)).toBeNull()
   })
 
-  test("the billboard drops whatever is promoted from its title: a season, a part, a limited series", () => {
-    const read = (title: string) => {
+  test("the billboard drops what is promoted from a show's title, after a comma, and never from a film's name", () => {
+    const read = (title: string, typename: string) => {
       const window = new Window({ url: "https://www.netflix.com/browse" })
       window.document.body.innerHTML = `<section data-uia="billboard"></section>`
       const section = window.document.querySelector("section") as unknown as Element
-      const entity = { __typename: "Show", releaseYear: 2026, videoId: 1 }
+      const entity = { __typename: typename, releaseYear: 2026, videoId: 1 }
       ;(section as unknown as Record<string, unknown>)["__reactFiber$b"] = {
         memoizedProps: { buttons: [{ onPress: { unifiedEntity: entity } }], title },
         return: null,
       }
       return readBillboard(section)?.title
     }
-    expect(read("HIS & HERS, Limited Series")).toBe("HIS & HERS")
-    expect(read("Stranger Things: Season 5")).toBe("Stranger Things")
-    expect(read("Money Heist, Part 3")).toBe("Money Heist")
-    expect(read("Alpha")).toBe("Alpha")
+    expect(read("HIS & HERS, Limited Series", "Show")).toBe("HIS & HERS")
+    expect(read("Money Heist, Part 3", "Show")).toBe("Money Heist")
+    expect(read("Shameless (U.S.), Season 1", "Show")).toBe("Shameless (U.S.)")
+    expect(read("Stranger Things: Season 5", "Show")).toBe("Stranger Things: Season 5")
+    expect(read("Friday the 13th: Part 2", "Movie")).toBe("Friday the 13th: Part 2")
+    expect(read("John Wick: Chapter 4", "Movie")).toBe("John Wick: Chapter 4")
+    expect(read("Alpha", "Movie")).toBe("Alpha")
   })
 
   test("an element with no fiber, or no card above it, reads as null", () => {

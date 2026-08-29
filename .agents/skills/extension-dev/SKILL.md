@@ -38,7 +38,7 @@ Chrome: `chrome://extensions`, Developer mode, Load unpacked, pick `extension/wx
 
 ## Releases
 
-The release workflow (`.github/workflows/auto-release.yml`, on a canary-to-main merge) builds `bun run zip` and `zip:firefox` with `WXT_PUBLIC_API_URL` from the repo variable of that name (the production API) and uploads both zips to the GitHub release; the manifest version comes from the root `package.json`, which the same flow bumps. A local production zip is the same two commands with the URL set inline.
+The release workflow (`.github/workflows/auto-release.yml`, on a canary-to-main merge) builds `bun run zip` and `zip:firefox` with `WXT_PUBLIC_API_URL` from the repo variable of that name (the production API) and uploads both zips to the GitHub release, plus an unversioned copy of each (`rate-my-ott-chrome.zip`, `rate-my-ott-firefox.zip`) so the `releases/latest/download/` links on the site stay stable; the manifest version comes from the root `package.json`, which the same flow bumps. A local production zip is the same two commands with the URL set inline.
 
 ## Verify a change
 

@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test"
 import {
   DOMINANT_MIN_VOTES,
   fitsQuery,
+  addAka,
   imdbType,
   keepAka,
   keepTitle,
@@ -23,6 +24,7 @@ import {
   VOTES_DOMINANCE,
   type ImdbBasics,
   type ImdbTitle,
+  type Spellings,
 } from "../../../../../api/hono/src/lib/imdb"
 
 const basics = (over: Partial<ImdbBasics> = {}): ImdbBasics => ({
@@ -110,12 +112,16 @@ describe("dataset lines", () => {
 describe("alternate names", () => {
   test("parses an akas row and keeps the spellings a platform could show", () => {
     expect(parseAkasLine("tt1160419\t16\tDune\tIN\ten\timdbDisplay\t\\N\t0")).toEqual({
+      attributes: null,
       id: "tt1160419",
       isOriginal: false,
       region: "IN",
       title: "Dune",
       types: "imdbDisplay",
     })
+    expect(
+      parseAkasLine("tt3322312\t27\tMarvel's Daredevil\tUS\t\\N\t\\N\tcomplete title\t0"),
+    ).toMatchObject({ attributes: "complete title", types: null })
     expect(
       parseAkasLine(
         "titleId\tordering\ttitle\tregion\tlanguage\ttypes\tattributes\tisOriginalTitle",
@@ -124,6 +130,7 @@ describe("alternate names", () => {
     expect(parseAkasLine("tt1\t1\t\\N\tUS\t\\N\t\\N\t\\N\t0")).toBeNull()
     expect(parseAkasLine("tt1\t1\tX")).toBeNull()
     const aka = (over: Partial<ReturnType<typeof parseAkasLine> & object>) => ({
+      attributes: null,
       id: "tt1",
       isOriginal: false,
       region: "US",
@@ -133,13 +140,48 @@ describe("alternate names", () => {
     })
     expect(keepAka(aka({}))).toBe(true)
     expect(keepAka(aka({ region: "IN", types: "imdbDisplay" }))).toBe(true)
-    expect(keepAka(aka({ region: "XWW", types: null }))).toBe(true)
+    // A row with no type is an alias named by its attribute: a complete title or a spelling variant names the title, a working, season, cut, or informal title names a stranger.
+    expect(keepAka(aka({ attributes: "complete title", region: "US", types: null }))).toBe(true)
+    expect(keepAka(aka({ attributes: "alternative spelling", region: "GB", types: null }))).toBe(
+      true,
+    )
+    expect(keepAka(aka({ attributes: "fake working title", region: "GB", types: null }))).toBe(
+      false,
+    )
+    expect(keepAka(aka({ attributes: "third season title", region: "US", types: null }))).toBe(
+      false,
+    )
+    expect(keepAka(aka({ attributes: "complete title", region: "BR", types: null }))).toBe(false)
+    expect(keepAka(aka({ region: "XWW", types: null }))).toBe(false)
+    expect(keepAka(aka({ region: "US", types: null }))).toBe(false)
     expect(keepAka(aka({ region: null, isOriginal: true, types: "original" }))).toBe(true)
     expect(keepAka(aka({ region: "US", types: "alternative" }))).toBe(true)
+    // IMDb joins several types with \\x02.
+    expect(keepAka(aka({ region: "US", types: "imdbDisplay\u0002tv" }))).toBe(true)
+    expect(keepAka(aka({ region: "US", types: "festival\u0002working" }))).toBe(false)
     expect(keepAka(aka({ region: "BR", types: "imdbDisplay" }))).toBe(false)
     expect(keepAka(aka({ region: "US", types: "working" }))).toBe(false)
-    expect(keepAka(aka({ region: "US", types: "festival,working" }))).toBe(false)
     expect(keepAka(aka({ region: null, types: "imdbDisplay" }))).toBe(false)
+  })
+})
+
+describe("addAka", () => {
+  test("adds a new spelling to a known title once, never one it already owns", () => {
+    const spellings: Spellings = new Map([["tt3322312", { akas: [], own: ["daredevil"] }]])
+    const aka = (title: string, id = "tt3322312") => ({
+      attributes: null,
+      id,
+      isOriginal: false,
+      region: "US",
+      title,
+      types: "alternative",
+    })
+    expect(addAka(spellings, aka("Marvel's Daredevil"))).toBe(true)
+    expect(addAka(spellings, aka("Marvel's Daredevil"))).toBe(false)
+    expect(addAka(spellings, aka("DAREDEVIL"))).toBe(false)
+    expect(addAka(spellings, aka("!!!"))).toBe(false)
+    expect(addAka(spellings, aka("Anything", "tt0"))).toBe(false)
+    expect(spellings.get("tt3322312")).toEqual({ akas: ["marvel s daredevil"], own: ["daredevil"] })
   })
 })
 
@@ -477,6 +519,47 @@ describe("pickImdbTitle", () => {
         pickImdbTitle(order, { runtime: 100, title: "X", type: "movie", year: 2020 }, at),
       ).toBe(a)
     }
+  })
+
+  test("a title that fits under its own name beats any that fit only under an alternate name, which is taken only alone", () => {
+    // Torchwood (2006) carries "torchwood" as its own name; Doctor Who once used it as a fake working title.
+    const torchwood = title({
+      endYear: 2011,
+      id: "tt0485301",
+      runtime: null,
+      startYear: 2006,
+      titleType: "tvSeries",
+      votes: 45905,
+    })
+    const doctorWho = title({
+      aka: true,
+      endYear: null,
+      id: "tt0436992",
+      runtime: null,
+      startYear: 2005,
+      titleType: "tvSeries",
+      votes: 250000,
+    })
+    expect(
+      pickImdbTitle([doctorWho, torchwood], { title: "Torchwood", type: "series", year: 2006 }, at),
+    ).toBe(torchwood)
+    // "Dune" 2021: only Dune: Part One fits, and only under an alternate name.
+    const dune1984 = title({ id: "tt0087182", runtime: 137, startYear: 1984, votes: 193908 })
+    const partOne = title({
+      aka: true,
+      id: "tt1160419",
+      runtime: 155,
+      startYear: 2021,
+      votes: 1086538,
+    })
+    expect(
+      pickImdbTitle([dune1984, partOne], { title: "Dune", type: "movie", year: 2021 }, at),
+    ).toBe(partOne)
+    // Two alternate-name candidates fit: an ambiguity, whatever their votes.
+    const other = title({ aka: true, id: "tt2", runtime: 100, startYear: 2021, votes: 5 })
+    expect(
+      pickImdbTitle([partOne, other], { title: "Dune", type: "movie", year: 2021 }, at),
+    ).toBeNull()
   })
 
   test("the real Office: a namesake that started the stated year does not outrank the famous one", () => {
