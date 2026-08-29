@@ -89,16 +89,19 @@ describe("readEntity", () => {
         legacy({
           releaseYear: 2026,
           runtime: 8400,
-          summary: { id: 82023350, type: "movie" },
+          summary: { id: 70155590, type: "movie" },
           title: "Alpha",
-          unifiedEntityId: "Video:82023350",
+          unifiedEntityId: "Video:70155590",
         }),
       ),
-    ).toEqual({ runtime: 140, title: "Alpha", type: "movie", videoId: 82023350, year: 2026 })
+    ).toEqual({ runtime: 140, title: "Alpha", type: "movie", videoId: 70155590, year: 2026 })
+    // A model higher up (a row's, a billboard's) that names another video is not the card's; the walk goes on and finds nothing.
+    const stray = legacy({ releaseYear: 2018, summary: { id: 999, type: "movie" }, title: "Alpha" })
+    expect(readEntity(stray)).toBeNull()
     // The id falls back to the unified entity id; a model without either is not a card.
-    expect(readEntity(legacy({ title: "X", unifiedEntityId: "Video:42" }))).toEqual({
+    expect(readEntity(legacy({ title: "X", unifiedEntityId: "Video:70155590" }))).toEqual({
       title: "X",
-      videoId: 42,
+      videoId: 70155590,
     })
     expect(readEntity(legacy({ title: "X" }))).toBeNull()
   })

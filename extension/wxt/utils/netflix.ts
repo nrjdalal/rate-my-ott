@@ -3,7 +3,7 @@ import { compactCount, oneDecimal } from "@/utils/format"
 
 // Everything that reads or writes Netflix's DOM, as pure functions over the nodes they are handed (no globals, no extension APIs), so tests/extension/wxt/utils/netflix.test.ts can drive them with a fixture in happy-dom.
 
-// A card as the scanner reads it. pending is a card the MAIN-world script has not stamped yet (see netflix-entities.content.ts): its year and kind are on the way, and a lookup sent without them would either miss (a same-name title is an ambiguity the API refuses) or, worse, match the wrong one.
+// A card as the scanner reads it. pending is a card the MAIN-world script has not stamped yet (see netflix-entities.content.ts): its year and kind are on the way, and the API answers nothing without a year, so the scanner waits for the stamp rather than ask.
 export type CardInfo = {
   id: string
   pending: boolean

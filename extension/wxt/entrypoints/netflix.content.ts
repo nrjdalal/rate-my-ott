@@ -21,8 +21,6 @@ import { DEFAULT_SETTINGS, settings, type Settings } from "@/utils/settings"
 const FLUSH_MS = 250
 const RESCAN_MS = 2000
 const OBSERVE_MS = 100
-// How long a card may stay unstamped before it is looked up by title alone: the MAIN-world script stamps within a scan or two, and a page where it never does (Netflix moved its internals) still gets badges, just less precise ones.
-const STAMP_WAIT_MS = 2500
 // How long a lookup that failed (the API down, a batch refused) is left alone before the page asks again; every rescan would otherwise repeat the same failing request.
 const FAILED_RETRY_MS = 30000
 
@@ -37,7 +35,6 @@ export default defineContentScript({
     let current: Settings = await settings.getValue()
     const answers = new Map<string, Rating | null>()
     const failedAt = new Map<string, number>()
-    const firstSeen = new Map<string, number>()
     const inflight = new Set<string>()
     const pending = new Map<string, TitleQuery>()
     let flushTimer: number | null = null
@@ -59,15 +56,10 @@ export default defineContentScript({
     const paint = () => {
       if (!current.enabled) return
       if (current.badges) {
-        const now = Date.now()
         for (const card of findCards(document)) {
           const info = readCard(card)
-          if (!info) continue
-          if (info.pending) {
-            const seen = firstSeen.get(info.id) ?? now
-            firstSeen.set(info.id, seen)
-            if (now - seen < STAMP_WAIT_MS) continue
-          }
+          // A card is asked about only once the page has named its year: the API answers nothing without one, so a card the MAIN-world script never stamps (Netflix moved its internals) simply stays bare.
+          if (!info || info.pending || !info.year) continue
           const rating = ask({
             title: info.title,
             ...(info.runtime ? { runtime: info.runtime } : {}),
@@ -78,7 +70,7 @@ export default defineContentScript({
         }
       }
       const modal = readModal(document)
-      if (modal) {
+      if (modal && modal.query.year) {
         const rating = ask(modal.query)
         if (rating !== undefined && !hasPanel(modal.anchor)) renderPanel(modal.anchor, rating)
       }
@@ -103,7 +95,7 @@ export default defineContentScript({
         const rating = reply.ratings[index]
         if (rating !== undefined && rating !== null) answers.set(key, rating)
         else if (!reply.error) answers.set(key, null)
-        else failedAt.set(key, now)
+        else if (reply.error !== "disabled") failedAt.set(key, now)
       })
       if (reply.error && reply.error !== "disabled") console.warn("[rate-my-ott]", reply.error)
       paint()
@@ -125,6 +117,7 @@ export default defineContentScript({
     // A settings change repaints from what is already known, and disabling clears the page.
     settings.watch((next) => {
       current = next ?? DEFAULT_SETTINGS
+      failedAt.clear()
       removeAll(document)
       paint()
     })

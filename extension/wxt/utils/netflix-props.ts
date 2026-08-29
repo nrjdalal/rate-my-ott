@@ -59,8 +59,18 @@ function fromVideoModel(model: Record<string, unknown>): Entity | null {
   }
 }
 
-// Walk up from a card: a legacy videoModel is the whole answer; otherwise the first props with a videoId are the card's, the first section fragment with entity edges is the row's, and the edge whose entity has the card's videoId names the year and kind. Null when the element has no fiber or no card above it.
+// The video id the card's own link names (jbv= today, /watch/ or /title/ before), which any props met on the way up must agree with: a row, a billboard, or a modal above the card carries a model of its own.
+const linkedId = (card: Element): number | undefined => {
+  const href =
+    (card.matches("a[href]") ? card : card.querySelector("a[href]"))?.getAttribute("href") ?? ""
+  const match = href.match(/(?:\/watch\/|\/title\/|[?&]jbv=)(\d+)/)
+  return match ? Number(match[1]) : undefined
+}
+
+// Walk up from a card: a legacy videoModel for the card's own id is the whole answer; otherwise the first props with the card's videoId are the card's, the first section fragment with entity edges is the row's, and the edge whose entity has the card's videoId names the year and kind. Null when the element has no fiber or no card above it.
 export function readEntity(card: Element, maxDepth = 40): Entity | null {
+  const linked = linkedId(card)
+  const owns = (id: number) => linked === undefined || id === linked
   let videoId: number | undefined
   let title: string | undefined
   let edges: unknown[] | undefined
@@ -70,9 +80,9 @@ export function readEntity(card: Element, maxDepth = 40): Entity | null {
     if (isRecord(props)) {
       if (isRecord(props.videoModel)) {
         const legacy = fromVideoModel(props.videoModel)
-        if (legacy) return legacy
+        if (legacy && owns(legacy.videoId)) return legacy
       }
-      if (videoId === undefined && typeof props.videoId === "number") {
+      if (videoId === undefined && typeof props.videoId === "number" && owns(props.videoId)) {
         videoId = props.videoId
         if (typeof props.title === "string") title = props.title
       }
