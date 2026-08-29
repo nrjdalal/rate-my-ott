@@ -38,7 +38,7 @@ jobs:
           # WXT_PUBLIC_API_URL, which becomes the extension's default API origin and host permission),
           # one per browser, named by the release version wxt reads from the root package.json
           attach_extension() {
-            (cd extension/wxt && WXT_PUBLIC_API_URL="${{ vars.WXT_PUBLIC_API_URL }}" bun run zip && bun run zip:firefox)
+            (cd extension/wxt && export WXT_PUBLIC_API_URL="${{ vars.WXT_PUBLIC_API_URL }}" && bun run zip && bun run zip:firefox)
             gh release upload "$1" extension/wxt/.output/*.zip --clobber
           }
           # the changelog commit is mechanical (generated from already-reviewed PR titles),
