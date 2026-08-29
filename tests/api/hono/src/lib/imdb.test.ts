@@ -562,6 +562,61 @@ describe("pickImdbTitle", () => {
     ).toBeNull()
   })
 
+  test("verification comes before the own-name preference: a fan video carrying a famous film's name does not outrank the film", () => {
+    // "Star Wars: The Last Jedi" (2017, 152 min): the film under an alternate name, a RiffTrax video under its original title with no runtime on record.
+    const film = title({ aka: true, id: "tt2527336", runtime: 152, startYear: 2017, votes: 726000 })
+    const riff = title({ id: "tt11563030", runtime: null, startYear: 2018, votes: 43 })
+    expect(
+      pickImdbTitle(
+        [riff, film],
+        { runtime: 152, title: "Star Wars: The Last Jedi", type: "movie", year: 2017 },
+        at,
+      ),
+    ).toBe(film)
+    // Without a runtime to check, both are verifiable, the own name wins, and the film vetoes only an obscure pick.
+    expect(
+      pickImdbTitle(
+        [riff, film],
+        { title: "Star Wars: The Last Jedi", type: "movie", year: 2017 },
+        at,
+      ),
+    ).toBeNull()
+  })
+
+  test("an alternate-name candidate vetoes only a pick nobody has heard of", () => {
+    const torchwood = title({
+      endYear: 2011,
+      id: "tt0485301",
+      runtime: null,
+      startYear: 2006,
+      titleType: "tvSeries",
+      votes: 45905,
+    })
+    const doctorWho = title({
+      aka: true,
+      endYear: null,
+      id: "tt0436992",
+      runtime: null,
+      startYear: 2005,
+      titleType: "tvSeries",
+      votes: 250000,
+    })
+    expect(
+      pickImdbTitle([doctorWho, torchwood], { title: "Torchwood", type: "series", year: 2006 }, at),
+    ).toBe(torchwood)
+    const obscure = title({
+      endYear: 2011,
+      id: "tt1",
+      runtime: null,
+      startYear: 2006,
+      titleType: "tvSeries",
+      votes: 316,
+    })
+    expect(
+      pickImdbTitle([doctorWho, obscure], { title: "Torchwood", type: "series", year: 2006 }, at),
+    ).toBeNull()
+  })
+
   test("the real Office: a namesake that started the stated year does not outrank the famous one", () => {
     const us = title({
       endYear: 2013,

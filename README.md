@@ -13,7 +13,7 @@ A browser extension plus the small API behind it, built on [ZeroStarter](https:/
 ├── web/next/        # Website (Next.js App Router): landing page + MDX docs
 └── packages/
     ├── config/      # site.ts (brand identity + feature flags), TS/tsdown bases
-    ├── db/          # Drizzle schema (the `imdb_title` and `imdb_name` index tables) + migrations
+    ├── db/          # Drizzle schema (the `imdb_title` and `imdb_name` index tables, the `imdb_sync` rebuild records) + migrations
     └── env/         # Type-safe env, one validated entry per consumer
 ```
 

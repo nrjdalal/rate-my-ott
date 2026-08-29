@@ -18,7 +18,12 @@ export function App() {
     const message: Message = { type: "api:index" }
     browser.runtime
       .sendMessage(message)
-      .then((reply: IndexReply) => setStatus({ reply, state: "answered" }))
+      .then((reply: IndexReply | undefined) =>
+        setStatus({
+          reply: reply ?? { error: "No reply from the extension; try again", index: null },
+          state: "answered",
+        }),
+      )
       .catch((error: unknown) =>
         setStatus({
           reply: { error: error instanceof Error ? error.message : String(error), index: null },

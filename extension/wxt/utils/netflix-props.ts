@@ -1,5 +1,9 @@
 // Netflix's browse page is React, and its card components carry what the page fetched for them. The current card (a jbv anchor) holds videoId and title in its own props, and its row's props hold every edge with a unifiedEntity { __typename: "Movie" | "Show", releaseYear, runtimeSec }. The legacy card (.title-card, still rendered on genre pages) holds one videoModel { title, releaseYear, runtime, summary: { id, type: "movie" | "show" } }. Either is the only place the page states a title's year and kind, which is what keeps "Alpha (2026)" apart from the 2018 film; for a show the year is its latest season's, not its premiere's. React's fiber properties are visible only from the page's own JS world, so entrypoints/netflix-entities.content.ts runs there and stamps what this reads onto the card as data attributes for the isolated-world scanner. Pure over the element it is handed, so tests can hang a fake fiber chain on a happy-dom node.
 
+// Whether two spellings name the same title for the stamp's purposes: case and surrounding space are noise.
+export const sameTitle = (a: string, b: string): boolean =>
+  a.trim().toLowerCase() === b.trim().toLowerCase()
+
 export type Entity = {
   runtime?: number
   title: string
@@ -98,11 +102,11 @@ export const linkedId = (card: Element): number | undefined => {
 export function readEntity(card: Element, maxDepth = 40): Entity | null {
   // A card with a link owns the records that name its id; a link-less one (a modal's "More Like This" card) the records that name its label, so a modal's own model above the row never stamps the cards beneath it; a modal itself, with neither, owns the record it finds.
   const linked = linkedId(card)
-  const label = card.getAttribute("aria-label")?.trim().toLowerCase()
+  const label = card.getAttribute("aria-label")
   const owns = (entity: Entity) =>
     linked !== undefined
       ? entity.videoId === linked
-      : label === undefined || entity.title.trim().toLowerCase() === label
+      : label === null || sameTitle(entity.title, label)
   let videoId: number | undefined
   let title: string | undefined
   let edges: unknown[] | undefined

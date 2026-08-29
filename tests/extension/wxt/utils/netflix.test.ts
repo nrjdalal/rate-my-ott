@@ -112,6 +112,27 @@ describe("readCard", () => {
     expect(readCard(empty as Element)).toBeNull()
   })
 
+  test("a painted score names the query it answers, so another title on the same element is painted again", () => {
+    const doc = page(CARDS)
+    const card = findCards(doc)[4] as Element
+    renderBadge(card, rating({ imdbRating: 8.5 }), "a|2020|series|")
+    expect(hasBadge(card, "a|2020|series|")).toBe(true)
+    expect(hasBadge(card, "b|2021|movie|")).toBe(false)
+    renderBadge(card, rating({ imdbRating: 6.1 }), "b|2021|movie|")
+    expect(doc.querySelectorAll(".rmo-badge").length).toBe(1)
+    expect(doc.querySelector(".rmo-badge")?.textContent).toBe("6.1")
+    expect(hasBadge(card, "b|2021|movie|")).toBe(true)
+  })
+
+  test("a linked card is known by its id: a stamp title that differs from the label still counts", () => {
+    const doc = page(CARDS)
+    const [standard] = findCards(doc)
+    standard?.setAttribute("data-rmo-id", "81616273")
+    standard?.setAttribute("data-rmo-title", "")
+    expect(readCard(standard as Element)?.pending).toBe(false)
+    expect(readCard(standard as Element)?.year).toBe(2026)
+  })
+
   test("a stamp that names another id or label is no stamp: the card is pending again", () => {
     const doc = page(CARDS)
     const [standard] = findCards(doc)

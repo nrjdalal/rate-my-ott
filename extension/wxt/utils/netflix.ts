@@ -1,5 +1,6 @@
 import type { Rating, TitleQuery } from "@/utils/api"
 import { compactCount, oneDecimal } from "@/utils/format"
+import { sameTitle } from "@/utils/netflix-props"
 
 // Everything that reads or writes Netflix's DOM, as pure functions over the nodes they are handed (no globals, no extension APIs), so tests/extension/wxt/utils/netflix.test.ts can drive them with a fixture in happy-dom.
 
@@ -51,10 +52,12 @@ export function readCard(card: Element): CardInfo | null {
   // A stamp counts only while it names this card: React recycles a card element for another title, and the MAIN-world script re-stamps it on its next scan.
   const stampedId = card.getAttribute("data-rmo-id")
   const stampedTitle = card.getAttribute("data-rmo-title")
+  // A linked card is known by its id, a link-less one by its label, the same way the MAIN-world script decides whether to re-stamp it.
   const stamped =
     card.hasAttribute(STAMP) &&
-    (stampedId === null || !match || stampedId === match[1]) &&
-    (stampedTitle === null || stampedTitle === title)
+    (match
+      ? stampedId === null || stampedId === match[1]
+      : stampedTitle === null || sameTitle(stampedTitle, title))
   return {
     id: (stamped && stampedId) || (match ? (match[1] as string) : title),
     // Any card the page identifies (a jbv or /watch/ link, or a labelled modal card) gets a stamp from its React props; only a bare label has nothing to wait for.
@@ -85,8 +88,14 @@ export const badgeHost = (card: Element): HTMLElement =>
   card.querySelector("img")?.parentElement ??
   (card as HTMLElement)
 
-export const hasBadge = (card: Element): boolean =>
-  badgeHost(card).querySelector(`:scope > .${BADGE}`) !== null
+// Every painted score carries the key of the query it answers (data-rmo-for), so a card React recycled for another title, or the billboard a route change reused, is painted again rather than kept.
+export const FOR = "data-rmo-for"
+
+const painted = (node: Element | null, key: string): boolean =>
+  node !== null && node.getAttribute(FOR) === key
+
+export const hasBadge = (card: Element, key = ""): boolean =>
+  painted(badgeHost(card).querySelector(`:scope > .${BADGE}`), key)
 
 // A positioned host keeps the badge on the art; only a static one is touched, and only with a class, so Netflix's own positioning is never overridden.
 function ensurePositioned(host: HTMLElement): void {
@@ -116,13 +125,14 @@ function scores(doc: Document, rating: Rating): HTMLElement[] {
 }
 
 // Idempotent: the card ends with exactly one badge (or none), whatever it had before.
-export function renderBadge(card: Element, rating: Rating | null): void {
+export function renderBadge(card: Element, rating: Rating | null, key = ""): void {
   const host = badgeHost(card)
   host.querySelector(`:scope > .${BADGE}`)?.remove()
   if (!rating || !rating.found) return
   const parts = scores(host.ownerDocument, rating)
   if (parts.length === 0) return
   const badge = host.ownerDocument.createElement("span")
+  badge.setAttribute(FOR, key)
   // Netflix's own duration label sits top-right on the modal's cards; the badge takes the other corner there.
   badge.className = host.querySelector(".duration") ? `${BADGE} ${BADGE}--left` : BADGE
   badge.append(...parts)
@@ -196,18 +206,20 @@ export function readModal(root: ParentNode): ModalInfo | null {
   }
 }
 
-export const hasPanel = (anchor: HTMLElement): boolean =>
-  anchor.querySelector(`:scope > .${PANEL}`) !== null
+export const hasPanel = (anchor: HTMLElement, key = ""): boolean =>
+  painted(anchor.querySelector(`:scope > .${PANEL}`), key)
 
 // The modal's rating, as one more row of its details column ("Cast:", "Genres:", "This Movie Is:"): Netflix's own row classes, so it reads as Netflix's, with the score and vote count linking to the IMDb page. On the hover preview's metadata line instead, one more item cloned from the duration ("2h 20m  IMDb 5.4"). Nothing at all for a miss or a title nobody has rated yet. Idempotent like the badge.
-export function renderPanel(anchor: HTMLElement, rating: Rating | null): void {
+export function renderPanel(anchor: HTMLElement, rating: Rating | null, key = ""): void {
   const doc = anchor.ownerDocument
   anchor.querySelector(`:scope > .${PANEL}`)?.remove()
   if (!rating || !rating.found || rating.imdbRating === null) return
   if (anchor.classList.contains("videoMetadata--line")) {
-    const sibling = anchor.querySelector(".duration") ?? anchor.lastElementChild
-    const item = sibling ? (sibling.cloneNode(false) as HTMLElement) : doc.createElement("span")
+    // Cloned from the duration when there is one; a plain span otherwise, never the HD badge or the maturity box that end the line.
+    const duration = anchor.querySelector(".duration")
+    const item = duration ? (duration.cloneNode(false) as HTMLElement) : doc.createElement("span")
     item.classList.add(PANEL)
+    item.setAttribute(FOR, key)
     item.textContent = `IMDb ${oneDecimal(rating.imdbRating)}`
     if (rating.imdbVotes !== null)
       item.setAttribute("title", `${compactCount(rating.imdbVotes)} votes on IMDb`)
@@ -216,6 +228,7 @@ export function renderPanel(anchor: HTMLElement, rating: Rating | null): void {
   }
   const row = doc.createElement("div")
   row.className = `previewModal--tags ${PANEL}`
+  row.setAttribute(FOR, key)
   const label = doc.createElement("span")
   label.className = "previewModal--tags-label"
   label.textContent = "IMDb:"
@@ -260,11 +273,11 @@ export function readBillboard(root: ParentNode): BillboardInfo | null {
   }
 }
 
-export const hasBillboardRating = (anchor: HTMLElement): boolean =>
-  anchor.querySelector(`:scope > .${PANEL}`) !== null
+export const hasBillboardRating = (anchor: HTMLElement, key = ""): boolean =>
+  painted(anchor.querySelector(`:scope > .${PANEL}`), key)
 
 // The billboard's rating as two more items of its metadata line, cloned from the line's own separator and item so they read as Netflix's: "• IMDb 8.5". Nothing for a miss. Idempotent like the badge.
-export function renderBillboardRating(anchor: HTMLElement, rating: Rating | null): void {
+export function renderBillboardRating(anchor: HTMLElement, rating: Rating | null, key = ""): void {
   for (const node of anchor.querySelectorAll(`:scope > .${PANEL}`)) node.remove()
   if (!rating || !rating.found || rating.imdbRating === null) return
   // Cloned from the first item (the "Series" or "Film" label), not the last: the line ends with the maturity rating, whose box is not the look wanted. A clone keeps no id or data-uia, which name Netflix's own nodes.
@@ -278,6 +291,7 @@ export function renderBillboardRating(anchor: HTMLElement, rating: Rating | null
     node.removeAttribute("id")
     node.removeAttribute("data-uia")
     node.classList.add(PANEL)
+    node.setAttribute(FOR, key)
   }
   score.textContent = `IMDb ${oneDecimal(rating.imdbRating)}`
   score.setAttribute(
