@@ -140,6 +140,34 @@ export const addAka = (spellings: Spellings, aka: ImdbAka): boolean => {
   return true
 }
 
+// The short names a well-known title also answers to: what stands before the first colon or spaced dash in its own names ("Bleach" for "Bleach: Thousand-Year Blood War", "Tokyo Ghoul" for "Tokyo Ghoul:re", "Dahmer" for "Dahmer - Monster: The Jeffrey Dahmer Story"), since a platform shows a season or a sequel under the parent's bare name. Indexed as alternate names, so a title's own name always outranks them, and only for a well-known title, or every "Alpha: Something" would answer to "Alpha".
+const SUBTITLE_SEPARATOR = /:|\s-\s/
+export const shortNames = (
+  basics: Pick<ImdbBasics, "originalTitle" | "primaryTitle">,
+): string[] => {
+  const own = nameKeys(basics)
+  const keys: string[] = []
+  for (const name of [basics.primaryTitle, basics.originalTitle]) {
+    const [head] = name.split(SUBTITLE_SEPARATOR)
+    if (head === undefined || head === name) continue
+    const key = searchKey(head)
+    if (key && !own.includes(key) && !keys.includes(key)) keys.push(key)
+  }
+  return keys
+}
+
+export const addShortNames = (spellings: Spellings, basics: ImdbBasics): number => {
+  const known = spellings.get(basics.id)
+  if (!known) return 0
+  let added = 0
+  for (const key of shortNames(basics)) {
+    if (known.own.includes(key) || known.akas.includes(key)) continue
+    known.akas.push(key)
+    added += 1
+  }
+  return added
+}
+
 // Whether a title earns a row: a kind the index keeps, not adult, named, and either rated already or recent enough (this year or last) to be rated soon; a short or a video only once it is known. An old title nobody has voted on is never behind a card, and leaving it out keeps the table small.
 export const keepTitle = (basics: ImdbBasics, rating: ImdbRating | null, year: number): boolean => {
   if (imdbType(basics.titleType) === null || basics.isAdult || basics.primaryTitle === "")
@@ -237,7 +265,7 @@ export function fitsQuery(
   return true
 }
 
-// Among the candidates that fit, the one the platform meant, or null when that is not certain: no answer beats a wrong one. Nothing is taken without a stated year. A candidate that fits under its own name outranks the ones that fit only under an alternate name, which are taken only when one alone fits. Once any candidate can be checked against what was stated (a known year, a known runtime for a film when one was stated), the ones that cannot drop out, and they still veto the pick when one of them is far more popular. One left is the answer. Several of both kinds with no kind stated are an ambiguity. Several rank by closest runtime (a film, when one was stated), then votes, and the best is taken only when something separates it from the runner-up: a runtime closer by a clear margin, or votes that dominate, which is denied under a loose spelling and whenever a candidate in the running is too new to have earned its votes (unrated, or under the floor and from this year or last) and sits as close to the stated year as the best: that one is as likely the platform's as the popular twin. A year further off than the best is not: the platform states a year, and a new namesake a year either side of it is the tolerance at work, not the title.
+// Among the candidates that fit, the one the platform meant, or null when that is not certain: no answer beats a wrong one. Nothing is taken without a stated year. A candidate that fits under its own name outranks the ones that fit only under an alternate name, which are taken only when one alone fits. Once any candidate can be checked against what was stated (a known year, a known runtime for a film when one was stated), the ones that cannot drop out, and they still veto the pick when one of them is far more popular. One left is the answer. Several of both kinds with no kind stated are an ambiguity. Several rank by closest runtime (a film, when one was stated), then votes, and the best is taken only when something separates it from the runner-up: a runtime closer by a clear margin, or votes that dominate, which is denied under a loose spelling and whenever a candidate in the running is too new to have earned its votes (unrated, or under the floor and from this year or last) and sits as close to the stated year as the best: that one is as likely the platform's as the popular twin. A year further off than the best is not: the platform states a year, and a new namesake a year either side of it is the tolerance at work, not the title. Nor is one a stated runtime fits no better than the best: a namesake of the same year and length is a duplicate listing, not a rival.
 export function pickImdbTitle(
   candidates: ImdbTitle[],
   query: TitleQuery,
@@ -280,7 +308,8 @@ export function pickImdbTitle(
   const tooNew = (title: ImdbTitle) =>
     (title.votes === null ||
       (title.votes < DOMINANT_MIN_VOTES && (title.startYear ?? now) >= now - 1)) &&
-    yearGap(title) <= yearGap(top)
+    yearGap(title) <= yearGap(top) &&
+    !(Number.isFinite(gap(top)) && gap(top) <= gap(title))
   if (
     !options.exactYear &&
     !pool.some(tooNew) &&
@@ -304,7 +333,7 @@ export function resolveOutcome(
   candidatesFor: (spelling: string) => ImdbTitle[],
   now?: number,
 ): Outcome {
-  if (!query.year) return { reason: "unstated", title: null }
+  if (!query.year) return resolveUnstated(query, candidatesFor)
   let known = false
   for (const { loose, spelling } of titleSpellings(query.title)) {
     const candidates = candidatesFor(spelling)
@@ -316,6 +345,18 @@ export function resolveOutcome(
     return title ? { reason: null, title } : { reason: "ambiguous", title: null }
   }
   return { reason: known ? "unmatched" : "unknown", title: null }
+}
+
+// Without a stated year (a search result) nothing is taken, however unique the name: a new title IMDb lists under its original name would wear a namesake's score (Netflix's Mexican "Lovesick" of 2026 against the British series). The name is still looked up under the platform's own spellings, so the popup can tell a name the index lacks (unknown) from a year Netflix withheld (unstated).
+function resolveUnstated(
+  query: TitleQuery,
+  candidatesFor: (spelling: string) => ImdbTitle[],
+): Outcome {
+  for (const { loose, spelling } of titleSpellings(query.title)) {
+    if (loose) break
+    if (candidatesFor(spelling).length > 0) return { reason: "unstated", title: null }
+  }
+  return { reason: "unknown", title: null }
 }
 
 export const resolveTitle = (

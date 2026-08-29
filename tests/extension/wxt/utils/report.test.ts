@@ -39,10 +39,11 @@ describe("buildReport", () => {
       { key: "old|2020|series|", query: { title: "Old API Miss", type: "series", year: 2020 } },
       { key: "wait|2026|series|", query: { title: "Still Loading", type: "series", year: 2026 } },
       { key: "fail|2026|series|", query: { title: "Failed Lookup", type: "series", year: 2026 } },
-      { reason: "unstated", title: "Some Search Result" },
-      { reason: "unstated", title: "Some Search Result" },
+      { key: "search|||", query: { title: "Some Search Result" } },
+      { key: "search|||", query: { title: "Some Search Result" } },
     ]
     const answers = new Map<string, Rating | null>([
+      ["search|||", rating({ found: false, imdbRating: null, reason: "unstated" })],
       ["alpha|2025|movie|140", rating({ imdbRating: 3 })],
       ["alpha|2025|movie|", rating({ imdbRating: 3 })],
       ["new|2026|movie|", rating({ imdbRating: null, reason: "unrated" })],
@@ -100,7 +101,7 @@ describe("groupMisses", () => {
       "1 with several IMDb namesakes, so no guess: Alpha (2025)",
       "1 not in the IMDb index under this name: Viral Hit (2026)",
       "1 whose IMDb namesakes are other years, kinds, or lengths: Bleach (2022)",
-      "1 with no year stated by Netflix: Some Search Result",
+      "1 with no year stated by Netflix, so no guess: Some Search Result",
     ])
     expect(groupMisses([])).toEqual([])
     // Every reason has a line and a place in the order.

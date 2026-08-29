@@ -69,17 +69,16 @@ export default defineContentScript({
         for (const card of findCards(document)) {
           const info = readCard(card)
           if (!info) continue
-          // A card whose stamp no longer names it is being recycled for another title: its badge goes until the new stamp lands. A card is asked about only once the page has named its year: the API answers nothing without one, so a card the MAIN-world script never stamps (Netflix moved its internals) simply stays bare.
-          if (info.pending || !info.year) {
-            if (info.pending) renderBadge(card, null)
-            else items.push({ reason: "unstated", title: info.title })
+          // A card whose stamp no longer names it is being recycled for another title: its badge goes until the new stamp lands. A card is asked about once the page has named it, with whatever it stated: without a year (a search result) the API takes nothing, but says whether it knows the name. A card the MAIN-world script never stamps (Netflix moved its internals) simply stays bare.
+          if (info.pending) {
+            renderBadge(card, null)
             continue
           }
           const query: TitleQuery = {
             title: info.title,
             ...(info.runtime ? { runtime: info.runtime } : {}),
             ...(info.type ? { type: info.type } : {}),
-            year: info.year,
+            ...(info.year ? { year: info.year } : {}),
           }
           const rating = ask(query)
           const key = keyOf(query)
@@ -90,7 +89,7 @@ export default defineContentScript({
         }
       }
       const billboard = readBillboard(document)
-      if (billboard && billboard.query.year) {
+      if (billboard) {
         const rating = ask(billboard.query)
         const key = keyOf(billboard.query)
         items.push({ key, query: billboard.query })
@@ -99,7 +98,7 @@ export default defineContentScript({
         }
       }
       const modal = readModal(document)
-      if (modal && modal.query.year) {
+      if (modal) {
         const rating = ask(modal.query)
         const key = keyOf(modal.query)
         items.push({ key, query: modal.query })

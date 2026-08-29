@@ -4,6 +4,8 @@ import {
   DOMINANT_MIN_VOTES,
   fitsQuery,
   addAka,
+  shortNames,
+  addShortNames,
   imdbType,
   keepAka,
   keepTitle,
@@ -112,6 +114,66 @@ describe("dataset lines", () => {
 })
 
 describe("alternate names", () => {
+  test("a well-known title also answers to its name before a subtitle's colon or spaced dash", () => {
+    expect(
+      shortNames(
+        basics({
+          primaryTitle: "Bleach: Thousand-Year Blood War",
+          originalTitle: "Bleach: Sennen Kessen-hen",
+        }),
+      ),
+    ).toEqual(["bleach"])
+    expect(
+      shortNames(basics({ primaryTitle: "Tokyo Ghoul:re", originalTitle: "Tokyo Ghoul:re" })),
+    ).toEqual(["tokyo ghoul"])
+    expect(
+      shortNames(
+        basics({
+          primaryTitle: "Dahmer - Monster: The Jeffrey Dahmer Story",
+          originalTitle: "Dahmer - Monster: The Jeffrey Dahmer Story",
+        }),
+      ),
+    ).toEqual(["dahmer"])
+    // A hyphen inside a word is not a separator, a name without one has no short name, and a short name the title already answers to is nothing new.
+    expect(shortNames(basics({ primaryTitle: "Spider-Man", originalTitle: "Spider-Man" }))).toEqual(
+      [],
+    )
+    expect(shortNames(basics({ primaryTitle: "Dune", originalTitle: "Dune" }))).toEqual([])
+    expect(shortNames(basics({ primaryTitle: "Dune: Part One", originalTitle: "Dune" }))).toEqual(
+      [],
+    )
+    const spellings = new Map([
+      ["tt1", { akas: ["tybw"], own: ["bleach thousand year blood war"] }],
+    ])
+    expect(
+      addShortNames(
+        spellings,
+        basics({
+          id: "tt1",
+          primaryTitle: "Bleach: Thousand-Year Blood War",
+          originalTitle: "Bleach: Thousand-Year Blood War",
+        }),
+      ),
+    ).toBe(1)
+    expect(
+      addShortNames(
+        spellings,
+        basics({
+          id: "tt1",
+          primaryTitle: "Bleach: Thousand-Year Blood War",
+          originalTitle: "Bleach: Thousand-Year Blood War",
+        }),
+      ),
+    ).toBe(0)
+    expect(spellings.get("tt1")?.akas).toEqual(["tybw", "bleach"])
+    expect(
+      addShortNames(
+        spellings,
+        basics({ id: "tt2", primaryTitle: "Alpha: Beta", originalTitle: "Alpha: Beta" }),
+      ),
+    ).toBe(0)
+  })
+
   test("parses an akas row and keeps the spellings a platform could show", () => {
     expect(parseAkasLine("tt1160419\t16\tDune\tIN\ten\timdbDisplay\t\\N\t0")).toEqual({
       attributes: null,
@@ -482,6 +544,22 @@ describe("pickImdbTitle", () => {
     expect(pickImdbTitle([old, known], { title: "Ikka", type: "series", year: 2021 }, at)).toBe(
       known,
     )
+  })
+
+  test("a namesake too new to have earned its votes does not deny dominance when a stated runtime fits the best at least as well", () => {
+    // Netflix's "Blast" (2026, 143 minutes) against IMDb's Blast (2026, 142, 17K votes) and a second 2026 listing of the name (144, 19 votes): the same year and length is a duplicate, not a rival.
+    const blast = title({ id: "tt32", runtime: 142, startYear: 2026, votes: 16971 })
+    const twin = title({ id: "tt33", runtime: 144, startYear: 2026, votes: 19 })
+    expect(
+      pickImdbTitle([twin, blast], { runtime: 143, title: "Blast", type: "movie", year: 2026 }, at),
+    ).toBe(blast)
+    // Without a runtime to check, or with one the twin fits better, the twin is as likely the platform's.
+    expect(
+      pickImdbTitle([twin, blast], { title: "Blast", type: "movie", year: 2026 }, at),
+    ).toBeNull()
+    expect(
+      pickImdbTitle([twin, blast], { runtime: 145, title: "Blast", type: "movie", year: 2026 }, at),
+    ).toBeNull()
   })
 
   test("a namesake too new to have earned its votes denies dominance only from as close to the stated year as the best", () => {
@@ -856,6 +934,27 @@ describe("resolveOutcome and toRating", () => {
     ["Dune", [title({ id: "tt1160419", runtime: 155, startYear: 2021, votes: 1086538 })]],
   ])
   const lookup = (spelling: string) => index.get(spelling) ?? []
+
+  test("without a year, takes nothing, and says whether the index knows the name at all", () => {
+    // "Dune" is one film in this index and still not taken: Netflix's Mexican "Lovesick" (2026) is not the British series, however alone that one stands.
+    expect(resolveOutcome({ title: "Dune", type: "movie" }, lookup, NOW)).toEqual({
+      reason: "unstated",
+      title: null,
+    })
+    expect(resolveOutcome({ title: "Alpha" }, lookup, NOW)).toEqual({
+      reason: "unstated",
+      title: null,
+    })
+    expect(resolveOutcome({ title: "Nothing Here" }, lookup, NOW)).toEqual({
+      reason: "unknown",
+      title: null,
+    })
+    // A loose spelling never counts without a year: "Dune: Part Two" is not Dune.
+    expect(resolveOutcome({ title: "Dune: Part Two", type: "movie" }, lookup, NOW)).toEqual({
+      reason: "unknown",
+      title: null,
+    })
+  })
 
   test("says why a query got no title, and unknown when only a loose spelling had candidates", () => {
     expect(resolveOutcome({ title: "Alpha", type: "movie" }, lookup, NOW)).toEqual({

@@ -4,8 +4,8 @@ import type { Rating, TitleQuery } from "@/utils/api"
 
 export type Reason = NonNullable<Rating["reason"]>
 
-// One title on screen as the tab saw it in its last paint: asked about (with its query key into the answers), or never asked because Netflix stated no year for it.
-export type PaintItem = { key: string; query: TitleQuery } | { reason: "unstated"; title: string }
+// One title on screen as the tab saw it in its last paint, with its query key into the answers.
+export type PaintItem = { key: string; query: TitleQuery }
 
 export type Miss = { reason: Reason; title: string; year?: number }
 
@@ -17,7 +17,7 @@ export const WHY: Record<Reason, string> = {
   unknown: "not in the IMDb index under this name",
   unmatched: "whose IMDb namesakes are other years, kinds, or lengths",
   unrated: "on IMDb but not rated yet",
-  unstated: "with no year stated by Netflix",
+  unstated: "with no year stated by Netflix, so no guess",
 }
 export const ORDER: Reason[] = ["unrated", "ambiguous", "unknown", "unmatched", "unstated"]
 
@@ -42,10 +42,6 @@ export const buildReport = (
     misses.push(entry)
   }
   for (const item of items) {
-    if ("reason" in item) {
-      miss("unstated", item.title, undefined)
-      continue
-    }
     const rating = answers.get(item.key)
     if (rating === undefined || rating === null) continue
     const year = typeof item.query.year === "number" ? item.query.year : undefined

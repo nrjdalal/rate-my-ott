@@ -11,8 +11,23 @@ export const normalizeTitle = (value: string) =>
 export const lookupKey = (query: TitleQuery) =>
   `${normalizeTitle(query.title)}|${query.year ?? ""}|${query.type ?? ""}|${query.runtime ?? ""}`
 
-// The spellings to try when the index does not know a title as the platform writes it: as given, then without a parenthetical qualifier ("The Office (U.S.)" is still The Office), then without a subtitle after a colon ("Grand Theft Auto VI: An Extended Look"), which is loose: it names a parent or a namesake as easily as the title. Each is followed by its spelling with the leading English article dropped or "The" put on ("Devil's Advocate" is IMDb's "The Devil's Advocate"), as strict as the spelling itself: the article is the platform's to keep or drop, and the year, kind, and runtime still have to fit. Each distinct spelling is listed once, in that order.
+// The spellings to try when the index does not know a title as the platform writes it: as given, then without a parenthetical qualifier ("The Office (U.S.)" is still The Office), then without a subtitle after a colon ("Grand Theft Auto VI: An Extended Look"), then the subtitle alone ("Half Bad: The Bastard Son & The Devil Himself" is IMDb's "The Bastard Son & the Devil Himself"), both loose: they name a parent or a namesake as easily as the title. Each is followed by its spelling with the leading English article dropped or "The" put on ("Devil's Advocate" is IMDb's "The Devil's Advocate"), and, where a number stands as a word, with it written the other way ("Fear Street Part 1: 1994" is IMDb's "Fear Street: Part One - 1994"), all as strict as the spelling itself: the article and the numeral are the platform's to choose, and the year, kind, and runtime still have to fit. Each distinct spelling is listed once, in that order.
 const ARTICLE = /^(?:the|a|an)\s+/i
+const NUMBERS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
+const WORDS = new RegExp(`\\b(${NUMBERS.join("|")})\\b`, "gi")
+
+// The spelling with each standalone number written the other way (digits as words when there are any, else words as digits), or nothing when it has none.
+const renumbered = (spelling: string): string | undefined => {
+  const worded = spelling.replace(/\b(10|[1-9])\b/g, (digit) => {
+    const word = NUMBERS[Number(digit) - 1] as string
+    return word[0]!.toUpperCase() + word.slice(1)
+  })
+  if (worded !== spelling) return worded
+  const numbered = spelling.replace(WORDS, (word) =>
+    String(NUMBERS.indexOf(word.toLowerCase()) + 1),
+  )
+  return numbered !== spelling ? numbered : undefined
+}
 export type Spelling = { loose: boolean; spelling: string }
 
 export const titleSpellings = (title: string): Spelling[] => {
@@ -26,14 +41,19 @@ export const titleSpellings = (title: string): Spelling[] => {
   const add = (value: string, loose: boolean) => {
     const spelling = value.replace(/\s+/g, " ").trim()
     if (!spelling) return
-    push(spelling, loose)
     const bare = spelling.replace(ARTICLE, "")
-    push(bare === spelling ? `The ${spelling}` : bare, loose)
+    for (const form of [spelling, bare === spelling ? `The ${spelling}` : bare]) {
+      push(form, loose)
+      const other = renumbered(form)
+      if (other) push(other, loose)
+    }
   }
   add(title, false)
   const unqualified = title.replace(/\s*\([^)]*\)/g, "")
   add(unqualified, false)
-  add(unqualified.split(":")[0] as string, true)
+  const [head, ...subtitle] = unqualified.split(":")
+  add(head as string, true)
+  if (subtitle.length > 0) add(subtitle.join(":"), true)
   return spellings
 }
 
