@@ -1,4 +1,4 @@
-import { db, imdbName, imdbTitle, type Transaction } from "@packages/db"
+import { db, imdbName, imdbSync, imdbTitle, type Transaction } from "@packages/db"
 import { env } from "@packages/env/api-hono"
 import { count, sql } from "drizzle-orm"
 
@@ -190,7 +190,20 @@ async function rebuild(tx: Transaction, started: number) {
   if (!shouldPrune(before, kept)) {
     throw new Error(`only ${kept} titles kept against ${before} indexed, refusing to prune`)
   }
-  return prune(tx, seen)
+  const pruned = await prune(tx, seen)
+  // The record of this rebuild lands with it, so the newest row always describes the index that is serving.
+  let spellings = 0
+  for (const list of keys.values()) spellings += list.length
+  // Stamped from here, not by the database default: now() inside the transaction is when it began, a minute or two earlier.
+  await tx.insert(imdbSync).values({
+    akas,
+    durationMs: Math.round(performance.now() - started),
+    finishedAt: new Date(),
+    names: spellings,
+    pruned,
+    titles: kept,
+  })
+  return pruned
 }
 
 async function main() {

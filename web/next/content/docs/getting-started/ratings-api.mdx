@@ -69,6 +69,10 @@ A wrong score is worse than none, so every ambiguity is a miss. The [imdb-sync s
 
 `bun run imdb:sync` (`api/hono/src/jobs/imdb-sync.ts`) streams IMDb's `title.ratings`, `title.basics`, and `title.akas` datasets (about 750 MB gzipped) and upserts them into `imdb_title` and `imdb_name`, writing only rows that changed, dropping the spellings a renamed title no longer answers to, and pruning titles that left the dataset, all in one transaction so a night lands whole or not at all; a full rebuild takes a minute or two locally and a few minutes from CI. In production the `auto-imdb-sync` workflow runs it every day at 14:30 UTC, after IMDb's own refresh. The two tables take about 210 MB.
 
+## `GET /api/v1/ratings/status`
+
+What the index holds and when it was last rebuilt: `{ "data": { "index": { "akas": 56088, "finishedAt": "2026-08-29T14:33:00.000Z", "names": 775897, "titles": 619222 } } }`, or `"index": null` while it has never been built. Each rebuild writes its record (`imdb_sync`) inside its own transaction, so the newest row always describes the index that is serving; a rebuild that failed leaves no row, which is how a stale index shows. The extension's popup reads it ("IMDb index: 619K titles, refreshed 2 hours ago").
+
 ## Errors
 
 The usual envelope, `{ "error": { "code", "message" } }`, with one code of its own: `503 SERVICE_UNAVAILABLE` while the index is empty (the sync has not run yet). `400 VALIDATION_ERROR` carries the failing fields.
