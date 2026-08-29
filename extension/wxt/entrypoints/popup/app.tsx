@@ -101,7 +101,7 @@ export function App() {
             <span className="text-amber-600">The IMDb index has not been built yet</span>
           ))}
       </p>
-      <footer className="mt-3 flex items-center justify-between text-xs text-neutral-500">
+      <footer className="mt-3 flex items-start justify-between gap-4 text-xs text-neutral-500">
         <button
           type="button"
           className="font-medium text-neutral-700 hover:underline dark:text-neutral-300"
@@ -109,7 +109,7 @@ export function App() {
         >
           Options
         </button>
-        <span>
+        <span className="text-right">
           Information courtesy of{" "}
           <a
             href="https://www.imdb.com"
