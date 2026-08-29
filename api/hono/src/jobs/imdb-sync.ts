@@ -3,11 +3,15 @@ import { env } from "@packages/env/api-hono"
 import { count, sql } from "drizzle-orm"
 
 import {
+  AKA_MIN_VOTES,
+  keepAka,
   keepTitle,
   nameKeys,
+  parseAkasLine,
   parseBasicsLine,
   parseRatingsLine,
   readGzipLines,
+  searchKey,
   shouldPrune,
   staleNames,
   toImdbTitle,
@@ -15,7 +19,7 @@ import {
   type ImdbTitle,
 } from "@/lib/imdb"
 
-// Rebuilds the IMDb index from IMDb's daily datasets: every kept title is upserted (only rows that changed are written), spellings are added and the ones a renamed title no longer answers to are dropped, and titles that left the dataset are pruned. Run by the nightly workflow and by hand (`bun run imdb:sync`); safe to rerun, and a rerun on unchanged data writes nothing.
+// Rebuilds the IMDb index from IMDb's daily datasets: every kept title is upserted (only rows that changed are written), its spellings (primary and original name, plus the alternate names a well-known title is displayed under) are added and the ones it no longer answers to are dropped, and titles that left the dataset are pruned. Run by the nightly workflow and by hand (`bun run imdb:sync`); safe to rerun, and a rerun on unchanged data writes nothing.
 
 // Rows per statement. Each batch travels as one JSON parameter and is unpacked server-side (json_to_recordset): a 5,000-row VALUES list with 45,000 placeholders is a plan Neon's smallest compute cannot hold ("out of memory ... CachedPlan"), while one parameter is one small plan, and few enough round trips for the job to finish in minutes from a CI runner.
 const BATCH = 5000
@@ -56,7 +60,7 @@ const TITLE_RECORD = sql.raw(
 )
 const NAME_RECORD = sql.raw('t(key text, "titleId" text)')
 
-async function flush(tx: Transaction, titles: ImdbTitle[], names: Name[]) {
+async function flushTitles(tx: Transaction, titles: ImdbTitle[]) {
   if (titles.length === 0) return
   // Only a row whose values changed is written, so a rerun on unchanged data leaves the table alone.
   await tx.execute(sql`
@@ -70,6 +74,10 @@ async function flush(tx: Transaction, titles: ImdbTitle[], names: Name[]) {
     where (imdb_title.end_year, imdb_title.original_title, imdb_title.primary_title, imdb_title.rating, imdb_title.runtime, imdb_title.start_year, imdb_title.title_type, imdb_title.votes)
       is distinct from (excluded.end_year, excluded.original_title, excluded.primary_title, excluded.rating, excluded.runtime, excluded.start_year, excluded.title_type, excluded.votes)
   `)
+}
+
+// The spellings of a batch of titles: added on conflict-do-nothing, and the ones the titles no longer answer to deleted, so a renamed title (IMDb renames working titles often) stops answering to its old spelling, or a platform's title of that name would land on it.
+async function flushNames(tx: Transaction, ids: string[], names: Name[]) {
   if (names.length > 0) {
     await tx.execute(sql`
       insert into imdb_name (key, title_id)
@@ -77,11 +85,9 @@ async function flush(tx: Transaction, titles: ImdbTitle[], names: Name[]) {
       on conflict do nothing
     `)
   }
-  // A renamed title (IMDb renames working titles often) must stop answering to its old spelling, or a platform's title of that name would land on it.
-  const ids = JSON.stringify(titles.map((title) => title.id))
   const existing = await tx.execute<Name>(sql`
     select key, title_id as "titleId" from imdb_name
-    where title_id in (select json_array_elements_text(${ids}::text::json))
+    where title_id in (select json_array_elements_text(${JSON.stringify(ids)}::text::json))
   `)
   const stale = staleNames([...existing] as Name[], names)
   if (stale.length > 0) {
@@ -127,10 +133,12 @@ async function rebuild(tx: Transaction, started: number) {
   log(`${ratings.size} ratings read in ${seconds(started)}`)
 
   const seen = new Set<number>()
+  // Every kept title's spellings, filled from the basics and then from the alternate names, and written once both are known so the stale-name diff sees the whole set.
+  const keys = new Map<string, string[]>()
+  const popular = new Set<number>()
   let read = 0
   let kept = 0
   let titles: ImdbTitle[] = []
-  let names: Name[] = []
   for await (const line of await open("title.basics.tsv.gz")) {
     read += 1
     if (read % 1_000_000 === 0) log(`${read} rows read, ${kept} kept, ${seconds(started)}`)
@@ -144,15 +152,41 @@ async function rebuild(tx: Transaction, started: number) {
     }
     seen.add(numericId(basics.id))
     titles.push(toImdbTitle(basics, rating))
-    for (const key of nameKeys(basics)) names.push({ key, titleId: basics.id })
+    keys.set(basics.id, nameKeys(basics))
+    if (rating !== null && rating.votes >= AKA_MIN_VOTES) popular.add(numericId(basics.id))
     if (titles.length >= BATCH) {
-      await flush(tx, titles, names)
+      await flushTitles(tx, titles)
       titles = []
+    }
+  }
+  await flushTitles(tx, titles)
+  log(`${read} rows read, ${kept} titles kept and written in ${seconds(started)}`)
+
+  let akas = 0
+  for await (const line of await open("title.akas.tsv.gz")) {
+    const aka = parseAkasLine(line)
+    if (!aka || !popular.has(numericId(aka.id)) || !keepAka(aka)) continue
+    const key = searchKey(aka.title)
+    const known = keys.get(aka.id)
+    if (!key || !known || known.includes(key)) continue
+    known.push(key)
+    akas += 1
+  }
+  log(`${akas} alternate names added for ${popular.size} well-known titles, ${seconds(started)}`)
+
+  let ids: string[] = []
+  let names: Name[] = []
+  for (const [id, spellings] of keys) {
+    ids.push(id)
+    for (const key of spellings) names.push({ key, titleId: id })
+    if (ids.length >= BATCH) {
+      await flushNames(tx, ids, names)
+      ids = []
       names = []
     }
   }
-  await flush(tx, titles, names)
-  log(`${read} rows read, ${kept} titles kept and written in ${seconds(started)}`)
+  await flushNames(tx, ids, names)
+  log(`${keys.size} titles' spellings written in ${seconds(started)}`)
   if (!shouldPrune(before, kept)) {
     throw new Error(`only ${kept} titles kept against ${before} indexed, refusing to prune`)
   }

@@ -4,10 +4,12 @@ import {
   DOMINANT_MIN_VOTES,
   fitsQuery,
   imdbType,
+  keepAka,
   keepTitle,
   MINOR_KIND_MIN_VOTES,
   nameKeys,
   OPEN_RUN_MIN_VOTES,
+  parseAkasLine,
   parseBasicsLine,
   parseRatingsLine,
   pickImdbTitle,
@@ -102,6 +104,42 @@ describe("dataset lines", () => {
     const seen: string[] = []
     for await (const line of readGzipLines(stream)) seen.push(line)
     expect(seen).toEqual(lines)
+  })
+})
+
+describe("alternate names", () => {
+  test("parses an akas row and keeps the spellings a platform could show", () => {
+    expect(parseAkasLine("tt1160419\t16\tDune\tIN\ten\timdbDisplay\t\\N\t0")).toEqual({
+      id: "tt1160419",
+      isOriginal: false,
+      region: "IN",
+      title: "Dune",
+      types: "imdbDisplay",
+    })
+    expect(
+      parseAkasLine(
+        "titleId\tordering\ttitle\tregion\tlanguage\ttypes\tattributes\tisOriginalTitle",
+      ),
+    ).toBeNull()
+    expect(parseAkasLine("tt1\t1\t\\N\tUS\t\\N\t\\N\t\\N\t0")).toBeNull()
+    expect(parseAkasLine("tt1\t1\tX")).toBeNull()
+    const aka = (over: Partial<ReturnType<typeof parseAkasLine> & object>) => ({
+      id: "tt1",
+      isOriginal: false,
+      region: "US",
+      title: "X",
+      types: "imdbDisplay",
+      ...over,
+    })
+    expect(keepAka(aka({}))).toBe(true)
+    expect(keepAka(aka({ region: "IN", types: "imdbDisplay" }))).toBe(true)
+    expect(keepAka(aka({ region: "XWW", types: null }))).toBe(true)
+    expect(keepAka(aka({ region: null, isOriginal: true, types: "original" }))).toBe(true)
+    expect(keepAka(aka({ region: "US", types: "alternative" }))).toBe(true)
+    expect(keepAka(aka({ region: "BR", types: "imdbDisplay" }))).toBe(false)
+    expect(keepAka(aka({ region: "US", types: "working" }))).toBe(false)
+    expect(keepAka(aka({ region: "US", types: "festival,working" }))).toBe(false)
+    expect(keepAka(aka({ region: null, types: "imdbDisplay" }))).toBe(false)
   })
 })
 

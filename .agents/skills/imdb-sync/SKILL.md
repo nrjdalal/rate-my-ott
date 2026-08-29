@@ -23,7 +23,7 @@ Every rating the API serves comes from IMDb's daily datasets (https://datasets.i
 
 ```bash
 bun run db:migrate          # once, the tables
-bun run imdb:sync           # downloads ~235 MB gzipped, writes the index, prunes what left; minutes, not hours
+bun run imdb:sync           # downloads ~750 MB gzipped (basics, ratings, akas), writes the index, prunes what left; minutes, not hours
 ```
 
 The job is one transaction, so a night lands whole or not at all (a failed download leaves the previous index serving), and it runs without parallel workers (`set local max_parallel_workers_per_gather = 0`): on Neon's smallest compute a parallel scan cannot allocate its dynamic shared memory once the table has grown ("could not resize shared memory segment"). It is safe to rerun: titles are upserted and only rows whose values changed are written, spellings are added on conflict-do-nothing and the ones a renamed title no longer answers to are deleted (`staleNames`), and titles the dataset no longer lists are deleted (their names follow by cascade). Two guards: a rebuild that would shrink the index by half or more refuses to prune (a truncated download), and more than 1.5 million kept titles stops the job before the free Neon branch (512 MB) fills.
@@ -34,7 +34,7 @@ To test the job without IMDb, serve a directory holding a small `title.basics.ts
 
 ## What is kept
 
-`keepTitle` in `lib/imdb.ts`: kinds `movie`, `tvMovie`, `tvSpecial`, `short`, `video` (a film to the platform) and `tvSeries`, `tvMiniSeries` (a series), not adult, with a name, and either rated or from this year or last (an unrated old title is never behind a card); a short or a video only with 100+ votes. Episodes and games are left out; so are alternate and localized names (`title.akas`, 512 MB gzipped, to be filtered on import), which is the next step: IMDb renames titles ("Dune" became "Dune: Part One" under both its names, so Netflix's "Dune" now misses) and brands them differently ("Marvel's Daredevil" is "Daredevil"), and `imdb_name` takes any number of spellings per title without a schema change.
+`keepTitle` in `lib/imdb.ts`: kinds `movie`, `tvMovie`, `tvSpecial`, `short`, `video` (a film to the platform) and `tvSeries`, `tvMiniSeries` (a series), not adult, with a name, and either rated or from this year or last (an unrated old title is never behind a card); a short or a video only with 100+ votes. Episodes and games are left out. Alternate names (`title.akas`) are kept for well-known titles only (`AKA_MIN_VOTES`, 1,000+ votes) and only the names IMDb displays in English-speaking regions or worldwide (`keepAka`: regions AU, CA, GB, IE, IN, NZ, US, XWW, types imdbDisplay, alternative, original; a working or festival title names a stranger as easily as the title), which is what lets Netflix's "Dune" reach "Dune: Part One" and "Marvel's Daredevil" reach "Daredevil" (about 56,000 names, 8 MB). A non-English Netflix UI would need the other regions; `imdb_name` takes any number of spellings per title without a schema change.
 
 ## How a title is matched
 

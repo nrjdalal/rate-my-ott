@@ -85,6 +85,33 @@ export function parseRatingsLine(line: string): ImdbRating | null {
 // The votes a short or a straight-to-video release needs to earn a row: IMDb lists a quarter of a million rated shorts, almost all with a handful of votes, and the few that reach a Netflix card are well known.
 export const MINOR_KIND_MIN_VOTES = 100
 
+// One row of title.akas.tsv: a spelling a title goes by somewhere, with where and what kind.
+export type ImdbAka = {
+  id: string
+  isOriginal: boolean
+  region: string | null
+  title: string
+  types: string | null
+}
+
+export function parseAkasLine(line: string): ImdbAka | null {
+  const cols = line.split("\t")
+  const id = cols[0]
+  if (cols.length < 8 || !id || !id.startsWith("tt")) return null
+  const title = text(cols[2])
+  if (title === null) return null
+  return { id, isOriginal: cols[7] === "1", region: text(cols[3]), title, types: text(cols[5]) }
+}
+
+// The alternate spellings worth indexing, and for which titles. A well-known title (this many votes) is the one a platform shows under a name IMDb does not lead with ("Dune" for "Dune: Part One", "Marvel's Daredevil" for "Daredevil"), and only the names IMDb displays in English-speaking regions or worldwide count: a working title, a festival title, or a spelling for another market names a stranger as easily as the title, and the free branch has no room for fifty spellings of every film.
+export const AKA_MIN_VOTES = 1000
+const AKA_REGIONS = new Set(["AU", "CA", "GB", "IE", "IN", "NZ", "US", "XWW"])
+const AKA_TYPES = new Set(["alternative", "imdbDisplay", "original"])
+
+export const keepAka = (aka: ImdbAka): boolean =>
+  (aka.isOriginal || (aka.region !== null && AKA_REGIONS.has(aka.region))) &&
+  (aka.types === null || aka.types.split(",").some((type) => AKA_TYPES.has(type)))
+
 // Whether a title earns a row: a kind the index keeps, not adult, named, and either rated already or recent enough (this year or last) to be rated soon; a short or a video only once it is known. An old title nobody has voted on is never behind a card, and leaving it out keeps the table small.
 export const keepTitle = (basics: ImdbBasics, rating: ImdbRating | null, year: number): boolean => {
   if (imdbType(basics.titleType) === null || basics.isAdult || basics.primaryTitle === "")
