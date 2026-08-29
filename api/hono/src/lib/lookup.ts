@@ -22,6 +22,51 @@ export const titleVariants = (title: string): string[] => {
   return variants
 }
 
+// How far a provider's answer may sit from what the platform stated and still be the same title: a release year differs by region and a festival premiere lands a year early; a runtime differs by a cut or a credits roll, not by much more.
+export const YEAR_TOLERANCE = 1
+export const RUNTIME_TOLERANCE_MIN = 5
+
+// Whether a provider answer is the title the platform showed (the name already matches): the year within tolerance, and, for a film whose length the platform states, the runtime within tolerance. An answer failing either is a same-name stranger, and no answer beats a wrong one. A field the provider has no record of cannot be checked and does not disqualify.
+export const matchesQuery = (
+  found: { runtime: number | null; year: number | null },
+  query: { runtime?: number; year?: number },
+): boolean => {
+  if (query.year && found.year !== null && Math.abs(found.year - query.year) > YEAR_TOLERANCE) {
+    return false
+  }
+  if (
+    query.runtime &&
+    found.runtime !== null &&
+    Math.abs(found.runtime - query.runtime) > RUNTIME_TOLERANCE_MIN
+  ) {
+    return false
+  }
+  return true
+}
+
+// Among the same-name candidates a search returned (with their details), the one the platform meant: of those that fit, the closest runtime when the platform stated one, else the exact year, else the first.
+export const pickCandidate = <T extends { runtime: number | null; year: number | null }>(
+  details: T[],
+  query: { runtime?: number; year?: number },
+): T | null => {
+  const fitting = details.filter((detail) => matchesQuery(detail, query))
+  if (fitting.length === 0) return null
+  const runtime = query.runtime
+  if (runtime) {
+    const measured = fitting
+      .filter((detail) => detail.runtime !== null)
+      .sort(
+        (a, b) =>
+          Math.abs((a.runtime as number) - runtime) - Math.abs((b.runtime as number) - runtime),
+      )
+    if (measured[0]) return measured[0]
+  }
+  return fitting.find((detail) => detail.year === query.year) ?? (fitting[0] as T)
+}
+
+// The years a search covers for a platform's stated year: its own first, then the year before (a premiere), then the year after (a late regional release).
+export const yearsAround = (year: number): number[] => [year, year - 1, year + 1]
+
 export const ratingKey = (query: TitleQuery) =>
   `${normalizeTitle(query.title)}|${query.year ?? ""}|${query.type ?? ""}`
 

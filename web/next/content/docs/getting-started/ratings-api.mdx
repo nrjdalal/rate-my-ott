@@ -18,7 +18,7 @@ The extension talks to one endpoint. Everything about it lives in `api/hono/src/
 }
 ```
 
-Up to 50 titles per call. `type` (`movie` or `series`) and `year` are optional, and worth sending when known: they are part of the cache key and of the OMDb query, which is what keeps a remake apart from the original. The answer is one entry per title, in the order asked:
+Up to 50 titles per call. `type` (`movie` or `series`), `year`, and `runtime` (minutes) are optional and worth sending when known. `type` and `year` are part of the cache key and of the OMDb query, which is what keeps a remake apart from the original; `year` and `runtime` also gate the answer: OMDb's best match is kept only when its year is within one of the platform's and, for a film, its runtime within five minutes, otherwise the year and its neighbours are searched for an exact-name candidate that fits, and a same-name stranger becomes a miss rather than a wrong score. The answer is one entry per title, in the order asked:
 
 ```json
 {

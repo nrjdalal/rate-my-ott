@@ -3,7 +3,8 @@
 export const TITLE_TYPES = ["movie", "series"] as const
 export type TitleType = (typeof TITLE_TYPES)[number]
 
-export type TitleQuery = { title: string; type?: TitleType; year?: number }
+// What a platform can say about a title: its name, and when it knows them, its kind, release year, and length in minutes, which are what tell one title from another of the same name.
+export type TitleQuery = { runtime?: number; title: string; type?: TitleType; year?: number }
 
 // What the provider answers for one query once normalized; the rating table minus its bookkeeping columns, so a hit is one upsert away from the cache.
 export type ProviderTitle = {
@@ -13,6 +14,7 @@ export type ProviderTitle = {
   metascore: number | null
   poster: string | null
   rottenTomatoes: number | null
+  runtime: number | null
   title: string
   type: TitleType | "unknown"
   year: number | null
@@ -24,6 +26,7 @@ export type OmdbBody = {
   Poster?: string
   Ratings?: { Source: string; Value: string }[]
   Response: "False" | "True"
+  Runtime?: string
   Title?: string
   Type?: string
   Year?: string
@@ -57,6 +60,12 @@ const yearOf = (value: string | null): number | null => {
   return match ? Number(match[0]) : null
 }
 
+// "128 min" as a number of minutes.
+const runtimeOf = (value: string | null): number | null => {
+  const match = value?.match(/(\d+)\s*min/)
+  return match ? Number(match[1]) : null
+}
+
 const typeOf = (value: string | undefined): ProviderTitle["type"] =>
   value === "movie" || value === "series" ? value : "unknown"
 
@@ -77,6 +86,7 @@ export function parseOmdb(body: OmdbBody): OmdbAnswer {
       metascore: asNumber(present(body.Metascore)),
       poster: present(body.Poster),
       rottenTomatoes: rottenTomatoesOf(body.Ratings),
+      runtime: runtimeOf(present(body.Runtime)),
       title: body.Title ?? "",
       type: typeOf(body.Type),
       year: yearOf(present(body.Year)),
@@ -84,10 +94,54 @@ export function parseOmdb(body: OmdbBody): OmdbAnswer {
   }
 }
 
-// The query string OMDb wants for a title lookup: the title, plus the year and type when the caller knows them, which is what disambiguates a remake from the original.
-export function omdbSearchParams(query: TitleQuery, apiKey: string): URLSearchParams {
+// The query string OMDb wants for a title lookup (its single best match): the title, plus the year and type when the caller knows them.
+export function omdbTitleParams(query: TitleQuery, apiKey: string): URLSearchParams {
   const params = new URLSearchParams({ apikey: apiKey, t: query.title })
   if (query.year) params.set("y", String(query.year))
   if (query.type) params.set("type", query.type)
   return params
+}
+
+// The query string for a search (every match, by title prefix), and for one entry by its IMDb id.
+export function omdbSearchParams(query: TitleQuery, apiKey: string): URLSearchParams {
+  const params = new URLSearchParams({ apikey: apiKey, s: query.title })
+  if (query.year) params.set("y", String(query.year))
+  if (query.type) params.set("type", query.type)
+  return params
+}
+
+export const omdbIdParams = (imdbId: string, apiKey: string): URLSearchParams =>
+  new URLSearchParams({ apikey: apiKey, i: imdbId })
+
+export type OmdbSearchBody = {
+  Error?: string
+  Response: "False" | "True"
+  Search?: { Title: string; Type: string; Year: string; imdbID: string }[]
+  totalResults?: string
+}
+
+export type Candidate = {
+  imdbId: string
+  title: string
+  type: ProviderTitle["type"]
+  year: number | null
+}
+
+export type OmdbSearchAnswer = { candidates: Candidate[]; ok: true } | { error: string; ok: false }
+
+// A search with no results is an empty answer, not an error; a refused key is, like the title lookup.
+export function parseOmdbSearch(body: OmdbSearchBody): OmdbSearchAnswer {
+  if (body.Response !== "True") {
+    const error = body.Error ?? "Unknown error"
+    return isRefusal(error) ? { error, ok: false } : { candidates: [], ok: true }
+  }
+  return {
+    candidates: (body.Search ?? []).map((entry) => ({
+      imdbId: entry.imdbID,
+      title: entry.Title,
+      type: typeOf(entry.Type),
+      year: yearOf(present(entry.Year)),
+    })),
+    ok: true,
+  }
 }

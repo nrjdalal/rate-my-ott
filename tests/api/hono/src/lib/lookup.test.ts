@@ -5,11 +5,14 @@ import {
   FOUND_TTL_MS,
   isStale,
   mapLimit,
+  matchesQuery,
   MISSING_TTL_MS,
   normalizeTitle,
+  pickCandidate,
   ratingKey,
   titleVariants,
   uniqueQueries,
+  yearsAround,
 } from "../../../../../api/hono/src/lib/lookup"
 
 describe("ratingKey", () => {
@@ -18,6 +21,38 @@ describe("ratingKey", () => {
     expect(ratingKey({ title: "Rick and Morty" })).toBe("rick and morty||")
     expect(ratingKey({ title: "Dune", type: "movie", year: 2021 })).toBe("dune|2021|movie")
     expect(ratingKey({ title: "Ｄune" })).toBe(ratingKey({ title: "dune" }))
+  })
+})
+
+describe("matchesQuery and pickCandidate", () => {
+  // Netflix's "Alpha" (2026 there, 2025 on IMDb, 140 minutes) against OMDb's same-name entries.
+  const french = { runtime: 128, year: 2026 }
+  const hindi = { runtime: 141, year: 2025 }
+  const american = { runtime: 96, year: 2018 }
+  const unmeasured = { runtime: null, year: 2026 }
+
+  test("a same-name film from another year or with another length is a stranger", () => {
+    expect(matchesQuery(french, { runtime: 140, year: 2026 })).toBe(false)
+    expect(matchesQuery(hindi, { runtime: 140, year: 2026 })).toBe(true)
+    expect(matchesQuery(american, { year: 2026 })).toBe(false)
+    expect(matchesQuery(french, { year: 2026 })).toBe(true)
+  })
+
+  test("what the provider has no record of cannot disqualify", () => {
+    expect(matchesQuery(unmeasured, { runtime: 140, year: 2026 })).toBe(true)
+    expect(matchesQuery({ runtime: null, year: null }, { runtime: 140, year: 2026 })).toBe(true)
+  })
+
+  test("the closest runtime wins, then the exact year, and nothing fitting is nothing", () => {
+    expect(pickCandidate([french, hindi, unmeasured], { runtime: 140, year: 2026 })).toBe(hindi)
+    expect(pickCandidate([unmeasured, hindi], { runtime: 140, year: 2026 })).toBe(hindi)
+    expect(pickCandidate([unmeasured], { runtime: 140, year: 2026 })).toBe(unmeasured)
+    expect(pickCandidate([american, french], { year: 2026 })).toBe(french)
+    expect(pickCandidate([french, american], { runtime: 140, year: 2026 })).toBeNull()
+  })
+
+  test("yearsAround covers the stated year, then the year before, then the year after", () => {
+    expect(yearsAround(2026)).toEqual([2026, 2025, 2027])
   })
 })
 

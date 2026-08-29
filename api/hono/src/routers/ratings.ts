@@ -11,6 +11,8 @@ import { lookupRatings, type Rating } from "@/lib/ratings"
 export const MAX_TITLES = 50
 
 const titleQuerySchema = z.object({
+  // Minutes; a film's length as the platform states it, which tells two same-name films of one year apart.
+  runtime: z.coerce.number().int().min(1).max(3000).optional().meta({ example: 140 }),
   title: z.string().trim().min(1).max(200).meta({ example: "Rick and Morty" }),
   type: z.enum(TITLE_TYPES).optional().meta({ example: "series" }),
   year: z.coerce.number().int().min(1888).max(2100).optional().meta({ example: 2013 }),

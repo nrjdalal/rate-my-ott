@@ -3,19 +3,35 @@ import { env } from "@packages/env/api-hono"
 import { getTableColumns, inArray, sql } from "drizzle-orm"
 
 import { ApiError } from "@/lib/error"
-import { alignTo, isStale, mapLimit, titleVariants, uniqueQueries } from "@/lib/lookup"
 import {
+  alignTo,
+  isStale,
+  mapLimit,
+  matchesQuery,
+  normalizeTitle,
+  pickCandidate,
+  titleVariants,
+  uniqueQueries,
+  yearsAround,
+} from "@/lib/lookup"
+import {
+  omdbIdParams,
   omdbSearchParams,
+  omdbTitleParams,
   parseOmdb,
+  parseOmdbSearch,
+  type Candidate,
   type OmdbBody,
+  type OmdbSearchBody,
   type ProviderTitle,
   type TitleQuery,
 } from "@/lib/omdb"
 
 export type Rating = typeof rating.$inferSelect
 
-// At most this many provider calls in flight for one request.
+// At most this many provider calls in flight for one request, and this many same-name candidates whose details a search is worth fetching.
 const CONCURRENCY = 5
+const MAX_CANDIDATES = 4
 
 // The provider asked once per spelling the platform's title could go by, stopping at the first hit; a title unknown under every spelling is a miss.
 async function fetchProviderTitle(query: TitleQuery): Promise<ProviderTitle | null> {
@@ -26,30 +42,70 @@ async function fetchProviderTitle(query: TitleQuery): Promise<ProviderTitle | nu
   return null
 }
 
-// One provider call, or a 502/503 the envelope can carry: 503 when no key is configured (the rest of the API keeps working without one), 502 when OMDb is down or refuses the key. A miss is null.
-async function fetchProviderOnce(query: TitleQuery): Promise<ProviderTitle | null> {
+// One GET to OMDb with the given params, answered as JSON, or a 502/503 the envelope can carry: 503 when no key is configured (the rest of the API keeps working without one), 502 when OMDb is down or refuses the key.
+async function omdbGet<T>(params: (apiKey: string) => URLSearchParams): Promise<T> {
   if (!env.OMDB_API_KEY) {
     throw new ApiError(503, "SERVICE_UNAVAILABLE", "Set OMDB_API_KEY to enable ratings lookups")
   }
   const url = new URL(env.OMDB_API_URL)
-  url.search = omdbSearchParams(query, env.OMDB_API_KEY).toString()
-  let body: OmdbBody
+  url.search = params(env.OMDB_API_KEY).toString()
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(8000) })
-    // OMDb answers 401 with a JSON body naming the key problem, which parseOmdb reports as a refusal; anything else non-2xx has no body worth reading.
+    // OMDb answers 401 with a JSON body naming the key problem, which the parsers report as a refusal; anything else non-2xx has no body worth reading.
     if (!response.ok && response.status !== 401) {
       throw new ApiError(502, "BAD_GATEWAY", `OMDb answered ${response.status}`)
     }
-    body = (await response.json()) as OmdbBody
+    return (await response.json()) as T
   } catch (error) {
     if (error instanceof ApiError) throw error
     const message = error instanceof Error ? error.message : String(error)
     throw new ApiError(502, "BAD_GATEWAY", `OMDb is unreachable: ${message}`)
   }
-  const answer = parseOmdb(body)
-  if (!answer.ok)
-    throw new ApiError(502, "BAD_GATEWAY", `OMDb refused the request: ${answer.error}`)
-  return answer.title
+}
+
+const refused = (error: string): never => {
+  throw new ApiError(502, "BAD_GATEWAY", `OMDb refused the request: ${error}`)
+}
+
+// OMDb's single best match for a title (t=), or by id (i=); a miss is null.
+async function omdbTitle(
+  params: (apiKey: string) => URLSearchParams,
+): Promise<ProviderTitle | null> {
+  const answer = parseOmdb(await omdbGet<OmdbBody>(params))
+  return answer.ok ? answer.title : refused(answer.error)
+}
+
+// The same-name candidates a search lists for the query's year and kind: OMDb searches by prefix, so the name is matched exactly here.
+async function omdbCandidates(query: TitleQuery): Promise<Candidate[]> {
+  const answer = parseOmdbSearch(
+    await omdbGet<OmdbSearchBody>((key) => omdbSearchParams(query, key)),
+  )
+  if (!answer.ok) return refused(answer.error)
+  const wanted = normalizeTitle(query.title)
+  return answer.candidates.filter(
+    (candidate) =>
+      normalizeTitle(candidate.title) === wanted && (!query.type || candidate.type === query.type),
+  )
+}
+
+// The provider asked for one spelling. Without a year, the title lookup is the whole story. With one, the title lookup is tried first and kept when it fits the platform's year and runtime; when it does not (it answers a same-name film from another year or country), the search lists the exact-name candidates for the year and its neighbours, and the one whose details fit is taken, or none: no answer beats a wrong one.
+async function fetchProviderOnce(query: TitleQuery): Promise<ProviderTitle | null> {
+  const direct = await omdbTitle((key) => omdbTitleParams(query, key))
+  if (!query.year) return direct
+  if (direct && matchesQuery(direct, query)) return direct
+  for (const year of yearsAround(query.year)) {
+    const candidates = (await omdbCandidates({ ...query, year })).slice(0, MAX_CANDIDATES)
+    if (candidates.length === 0) continue
+    const details = await mapLimit(candidates, CONCURRENCY, (candidate) =>
+      omdbTitle((key) => omdbIdParams(candidate.imdbId, key)),
+    )
+    const picked = pickCandidate(
+      details.filter((detail): detail is ProviderTitle => detail !== null),
+      query,
+    )
+    if (picked) return picked
+  }
+  return null
 }
 
 // A miss keeps the asked-for title, year, and type, so the row still says what was looked up.
