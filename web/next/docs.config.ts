@@ -17,7 +17,7 @@ const docsConfig: DocsConfig = {
         "/docs/getting-started/install": {
           title: "Install the extension",
           description:
-            "Get an OMDb key, run the stack, load the extension into Chrome, and point it at the API.",
+            "Run the stack, build the IMDb index, load the extension into Chrome, and point it at the API.",
           label: "Install",
         },
       },
@@ -25,7 +25,7 @@ const docsConfig: DocsConfig = {
         "/docs/getting-started/ratings-api": {
           title: "The Ratings API",
           description:
-            "What the extension calls: one batch endpoint over a Postgres cache, with OMDb behind it.",
+            "What the extension calls: one batch endpoint over the IMDb index, IMDb's daily datasets in Postgres.",
           label: "Ratings API",
         },
       },

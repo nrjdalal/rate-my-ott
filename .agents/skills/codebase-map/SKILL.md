@@ -9,10 +9,10 @@ source: https://github.com/nrjdalal/zerostarter
 One Bun + Turborepo monorepo (built on ZeroStarter): the Ratings API, the browser extension, and the website over shared packages. Imports use `@api/hono`, `@packages/*`, and the `@/` alias, never deep relative paths.
 
 ```
-api/hono/         # the Ratings API (Hono): routers, middlewares, the AppType export; lib/omdb.ts + lib/ratings.ts are the provider and its cache
+api/hono/         # the Ratings API (Hono): routers, middlewares, the AppType export; lib/imdb.ts + lib/lookup.ts (pure matching) + lib/ratings.ts (the query); jobs/imdb-sync.ts builds the index
 extension/wxt/    # the browser extension (WXT, React): entrypoints/ (netflix content script, background, popup, options), utils/netflix.ts (DOM)
 web/next/         # the website (Next.js App Router): app/, components/, lib/, content/ (MDX docs)
-packages/db/      # Drizzle schema (the rating cache table) + client (PostgreSQL via Bun's SQL driver)
+packages/db/      # Drizzle schema (the imdb_title + imdb_name index tables) + client (PostgreSQL via Bun's SQL driver)
 packages/env/     # type-safe env, one validated entry per consumer
 packages/config/  # TS base, tsdown factory, and site.ts (brand identity + feature flags)
 ```
@@ -30,7 +30,7 @@ Read `AGENTS.md` first for the rules; `curl "$(bunx portless get rate-my-ott)/ll
 | Call the API from the web app | `web/next/src/lib/api/client.ts` (`apiClient`, `unwrap`) | - |
 | Call the API from the extension | `extension/wxt/entrypoints/background.ts` via `utils/api.ts` (`createApiClient`, `unwrap`); the page asks the background with `utils/messages.ts` | `extension-dev` skill |
 | Change what the extension shows on Netflix | `extension/wxt/utils/netflix.ts` (which nodes, what is drawn), `entrypoints/netflix.content.ts` (the scan loop), `assets/netflix.css` | `extension-dev` skill |
-| Change or add a ratings provider | `api/hono/src/lib/omdb.ts` (pure parsing) and `lib/ratings.ts` (fetch + cache); the env for it in `packages/env/src/api-hono.ts` | `api-endpoint` skill |
+| Change how a title is matched, or what the index keeps | `api/hono/src/lib/imdb.ts` (pure: dataset rows, keep filter, matching) with its tests; `lib/ratings.ts` for the query; `jobs/imdb-sync.ts` for the rebuild | `imdb-sync` skill |
 | Rebrand (name, description, socials) or flip a feature flag | `packages/config/src/site.ts`, one file (the extension manifest reads it too) | - |
 | Add or read an env var | `packages/env/src/{api-hono,db,web-next}.ts` (`extension-wxt.ts` for a `WXT_PUBLIC_*` the extension bakes in); read via `@packages/env/*`, never `process.env`; mirror it in `turbo.json` `globalEnv` and `.env.example`. The root `.env` is loaded by `src/load-dotenv.ts`, which the server targets import and neither `web-next` nor the package index does; a new server target imports `@/load-dotenv` first | - |
 | Change the error/response shape | `api/hono/src/lib/error.ts` (the `{ error: { code, message } }` handler) | - |
