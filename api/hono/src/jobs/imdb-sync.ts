@@ -4,6 +4,7 @@ import { count, sql } from "drizzle-orm"
 
 import {
   addAka,
+  addShortNames,
   AKA_MIN_VOTES,
   keepAka,
   keepTitle,
@@ -140,6 +141,7 @@ async function readDatasets(started: number): Promise<Dump> {
   log(`${ratings.size} ratings read in ${seconds(started)}`)
   const titles: ImdbTitle[] = []
   const spellings: Spellings = new Map()
+  let akas = 0
   const popular = new Set<number>()
   let read = 0
   for await (const line of await open("title.basics.tsv.gz")) {
@@ -154,10 +156,12 @@ async function readDatasets(started: number): Promise<Dump> {
     }
     titles.push(toImdbTitle(basics, rating))
     spellings.set(basics.id, { akas: [], own: nameKeys(basics) })
-    if (rating !== null && rating.votes >= AKA_MIN_VOTES) popular.add(numericId(basics.id))
+    if (rating !== null && rating.votes >= AKA_MIN_VOTES) {
+      popular.add(numericId(basics.id))
+      akas += addShortNames(spellings, basics)
+    }
   }
-  log(`${read} rows read, ${titles.length} titles kept in ${seconds(started)}`)
-  let akas = 0
+  log(`${read} rows read, ${titles.length} titles kept, ${akas} short names, ${seconds(started)}`)
   for await (const line of await open("title.akas.tsv.gz")) {
     const aka = parseAkasLine(line)
     if (aka && popular.has(numericId(aka.id)) && keepAka(aka) && addAka(spellings, aka)) akas += 1

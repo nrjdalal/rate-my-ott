@@ -1,9 +1,10 @@
 import type { IndexStatus, Rating, TitleQuery } from "@/utils/api"
 
-// What the content script and the options page ask the background, which is the only context that talks to the API.
+// What the content script and the options page ask the background, which is the only context that talks to the API; page:latest is the one message that goes the other way, from the popup to a Netflix tab, which answers with its own report.
 export type Message =
   | { type: "api:health" }
   | { type: "api:index" }
+  | { type: "page:latest" }
   | { titles: TitleQuery[]; type: "ratings:lookup" }
 
 // One answer per title asked, in the order asked (null when the API had none or the request failed); `error` names the failure so the page can tell a miss from an outage.

@@ -4,6 +4,7 @@ import { describeRoute, resolver } from "hono-openapi"
 import { z } from "zod"
 
 import { ApiError, indexErrorResponses, validationErrorResponses } from "@/lib/error"
+import { REASONS } from "@/lib/imdb"
 import { TITLE_TYPES } from "@/lib/lookup"
 import { indexStatus, lookupRatings, type Rating } from "@/lib/ratings"
 
@@ -31,6 +32,8 @@ const ratingSchema = z.object({
   imdbVotes: z.number().nullable().meta({ example: 640000 }),
   metascore: z.null(),
   poster: z.null(),
+  // Why there is no score: a miss's cause, or "unrated" for a title IMDb lists but nobody has rated yet; null with a score.
+  reason: z.enum(REASONS).nullable().meta({ example: null }),
   rottenTomatoes: z.null(),
   title: z.string().meta({ example: "Rick and Morty" }),
   type: z.enum(["movie", "series", "unknown"]).meta({ example: "series" }),
@@ -45,6 +48,7 @@ const asResponse = (row: Rating) => ({
   imdbVotes: row.imdbVotes,
   metascore: null,
   poster: null,
+  reason: row.reason,
   rottenTomatoes: null,
   title: row.title,
   type: row.type,
@@ -107,7 +111,7 @@ export const ratingsRouter = new Hono()
     describeRoute({
       tags: ["Ratings"],
       description:
-        "The IMDb rating for one title, matched in the IMDb index (IMDb's daily datasets) by name, kind, year, and runtime; a year is required for a match. A title the index cannot match with certainty comes back with found=false: no answer rather than a wrong one.",
+        "The IMDb rating for one title, matched in the IMDb index (IMDb's daily datasets) by name, kind, year, and runtime; a year is required for a match. A title the index cannot match with certainty comes back with found=false and a reason: no answer rather than a wrong one.",
       ...({
         "x-codeSamples": [
           {
@@ -144,7 +148,7 @@ const { data, error } = await unwrap(
     "/",
     describeRoute({
       tags: ["Ratings"],
-      description: `IMDb ratings for a batch of titles (up to ${MAX_TITLES}), one answer per title in the order asked; what the extension calls with the cards it sees. Every title is matched in the IMDb index in one round trip.`,
+      description: `IMDb ratings for a batch of titles (up to ${MAX_TITLES}), one answer per title in the order asked, each with a reason when it has no score; what the extension calls with the cards it sees. Every title is matched in the IMDb index in one round trip.`,
       ...({
         "x-codeSamples": [
           {

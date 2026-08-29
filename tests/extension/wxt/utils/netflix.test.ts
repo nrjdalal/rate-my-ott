@@ -11,10 +11,15 @@ import {
   readBillboard,
   readCard,
   readModal,
+  readModals,
+  recall,
+  learn,
+  metaOf,
   removeAll,
   renderBadge,
   renderBillboardRating,
   renderPanel,
+  shouldDim,
 } from "../../../../extension/wxt/utils/netflix"
 
 // The current cards (a row card, a Top 10 card with its rank numeral, a Continue Watching card), the legacy slider and gallery cards, and a card with no title to skip.
@@ -55,6 +60,7 @@ const rating = (overrides: Partial<Rating> = {}): Rating => ({
   imdbVotes: 640123,
   metascore: null,
   poster: null,
+  reason: null,
   rottenTomatoes: null,
   title: "Rick and Morty",
   type: "series",
@@ -110,6 +116,24 @@ describe("readCard", () => {
       year: 2015,
     })
     expect(readCard(empty as Element)).toBeNull()
+  })
+
+  test("a title under the dim threshold fades its artwork; one without a score never does", () => {
+    const doc = page(CARDS)
+    const card = findCards(doc)[4] as Element
+    expect(shouldDim(rating({ imdbRating: 5.4 }), 6)).toBe(true)
+    expect(shouldDim(rating({ imdbRating: 6 }), 6)).toBe(false)
+    expect(shouldDim(rating({ imdbRating: null }), 6)).toBe(false)
+    expect(shouldDim(rating({ found: false, imdbRating: null }), 6)).toBe(false)
+    expect(shouldDim(rating({ imdbRating: 5.4 }), null)).toBe(false)
+    renderBadge(card, rating({ imdbRating: 5.4 }), "k", 6)
+    const host = doc.querySelector(".rmo-badge")?.parentElement
+    expect(host?.classList.contains("rmo-dim")).toBe(true)
+    renderBadge(card, rating({ imdbRating: 7.2 }), "k", 6)
+    expect(host?.classList.contains("rmo-dim")).toBe(false)
+    renderBadge(card, rating({ imdbRating: 5.4 }), "k", 6)
+    removeAll(doc)
+    expect(doc.querySelector(".rmo-dim")).toBeNull()
   })
 
   test("a painted score names the query it answers, so another title on the same element is painted again", () => {
@@ -261,18 +285,58 @@ describe("the hover preview", () => {
     expect(modal!.anchor.textContent).toBe("A1h 45mHD")
   })
 
-  test("a preview whose card is gone keeps its title and its duration's kind but no year, and an unstamped one is nothing to ask about", () => {
+  test("a preview whose card is gone keeps its title and its duration's kind and length but no year, and an unstamped one is nothing to ask about", () => {
     const alone = page(MINI.replace(/<a [^>]*>.*?<\/a>\n/s, ""))
-    expect(readModal(alone)?.query).toEqual({ title: "72 HOURS", type: "movie" })
+    expect(readModal(alone)?.query).toEqual({ runtime: 105, title: "72 HOURS", type: "movie" })
     expect(readModal(page(MINI.replace(/ data-rmo-[a-z]+="[^"]*"| data-rmo-meta/g, "")))).toBeNull()
   })
 })
 
+describe("learn and recall", () => {
+  test("a tab learns what any surface states about a video id, fills only what is missing, and lets a surface's own statements win", () => {
+    const known = new Map()
+    learn(known, "81000001", { type: "movie", year: 2026 })
+    learn(known, "81000001", metaOf({ runtime: 143, title: "Blast", year: 2025 }))
+    expect(known.get("81000001")).toEqual({ runtime: 143, type: "movie", year: 2026 })
+    // A legacy card that states no runtime gets the one a hovered preview stated; its own year stands.
+    expect(recall(known, "81000001", { type: "movie", year: 2025 })).toEqual({
+      runtime: 143,
+      type: "movie",
+      year: 2025,
+    })
+    expect(recall(known, "81000002", { year: 2020 })).toEqual({ year: 2020 })
+    learn(known, "81000002", metaOf({ title: "Nothing stated" }))
+    expect(known.has("81000002")).toBe(false)
+  })
+})
+
+describe("readModals", () => {
+  test("reads every open preview, and a legacy preview stamped without a title from the card it hovers over", () => {
+    const doc = page(`
+  <div class="title-card" data-rmo-meta data-rmo-id="81667463" data-rmo-title="" data-rmo-year="2026" data-rmo-type="series"><a class="slider-refocus" href="/watch/81667463?tctx=1" aria-label="MOURINHO"><img alt=""></a></div>
+  <div class="title-card" data-rmo-meta data-rmo-id="70204957" data-rmo-title="Bleach" data-rmo-year="2022" data-rmo-type="series"><a class="slider-refocus" href="/watch/70204957?tctx=1" aria-label="Bleach"><img alt=""></a></div>
+  <div class="previewModal--container mini-modal" data-rmo-meta data-rmo-id="81667463" data-rmo-title=""><div class="videoMetadata--container"><div class="videoMetadata--line"><span class="duration">Limited Series</span></div></div></div>
+  <div class="previewModal--container mini-modal" data-rmo-meta data-rmo-id="70204957" data-rmo-title="Bleach"><div class="videoMetadata--container"><div class="videoMetadata--line"><span class="duration">3 Seasons</span></div></div></div>
+`)
+    const modals = readModals(doc)
+    expect(modals.map((modal) => modal.query)).toEqual([
+      { title: "MOURINHO", type: "series", year: 2026 },
+      { title: "Bleach", type: "series", year: 2022 },
+    ])
+    expect(modals.every((modal) => modal.kind === "line")).toBe(true)
+    expect(modals.map((modal) => modal.id)).toEqual(["81667463", "70204957"])
+    expect(readModal(doc)?.query.title).toBe("MOURINHO")
+    // A preview stamped without a title whose card is gone has nothing to be asked about.
+    doc.querySelector(".title-card")?.remove()
+    expect(readModals(doc).map((modal) => modal.query.title)).toEqual(["Bleach"])
+  })
+})
+
 describe("readModal and renderPanel", () => {
-  test("reads the title, year, and kind, and inserts the ratings row after the metadata", () => {
+  test("reads the title, year, kind, and length from its metadata text, and inserts the ratings row after the metadata", () => {
     const doc = page(MODAL)
     const modal = readModal(doc)
-    expect(modal?.query).toEqual({ title: "Dune", type: "movie", year: 2021 })
+    expect(modal?.query).toEqual({ runtime: 155, title: "Dune", type: "movie", year: 2021 })
     expect(modal?.anchor.className).toBe("previewModal--detailsMetadata-right")
     expect(modal?.kind).toBe("details")
 
@@ -314,6 +378,10 @@ describe("readModal and renderPanel", () => {
 
   test("a series modal is typed by its season count, a limited series too, and a miss or an unrated title gets no row", () => {
     expect(readModal(page(MODAL.replace("2h 35m", "Limited Series")))?.query.type).toBe("series")
+    // A duration in another language is no length: "1 Std. 39 Min." is not 39 minutes.
+    expect(
+      readModal(page(MODAL.replace("2h 35m", "1 Std. 39 Min.")))?.query.runtime,
+    ).toBeUndefined()
     const doc = page(MODAL.replace("2h 35m", "3 Seasons"))
     const modal = readModal(doc)
     expect(modal?.query.type).toBe("series")

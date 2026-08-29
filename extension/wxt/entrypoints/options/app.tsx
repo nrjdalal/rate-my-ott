@@ -94,6 +94,36 @@ export function App() {
             </p>
           </section>
 
+          <section aria-labelledby="dim" className="flex flex-col gap-2">
+            <h2 id="dim" className="text-sm font-semibold">
+              Dim low-rated titles
+            </h2>
+            <label className="flex items-center justify-between gap-4 text-sm">
+              <span className="text-neutral-600 dark:text-neutral-400">
+                Fade the artwork of a title rated below
+              </span>
+              <select
+                className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                value={current.dimBelow ?? "off"}
+                onChange={(event) =>
+                  update({
+                    dimBelow: event.target.value === "off" ? null : Number(event.target.value),
+                  })
+                }
+              >
+                <option value="off">Off</option>
+                {[5, 5.5, 6, 6.5, 7, 7.5, 8].map((threshold) => (
+                  <option key={threshold} value={threshold}>
+                    {threshold.toFixed(1)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="text-xs text-neutral-500">
+              Titles without a score are never dimmed; the badge stays either way.
+            </p>
+          </section>
+
           <button
             type="button"
             className="self-start text-xs text-neutral-500 hover:underline"

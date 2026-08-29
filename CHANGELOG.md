@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.0.5
+
+[compare changes](https://github.com/nrjdalal/rate-my-ott/compare/v0.0.4...v0.0.5)
+
+### 🚀 Enhancements
+
+- Alternate names, the billboard and modal cards, downloads and privacy ([#9](https://github.com/nrjdalal/rate-my-ott/pull/9))
+
+### 🩹 Fixes
+
+- Verify before preferring own names, and repaint a recycled card's score ([#11](https://github.com/nrjdalal/rate-my-ott/pull/11))
+
+### ❤️ Contributors
+
+- Neeraj Dalal @nrjdalal
+
 ## v0.0.4
 
 [compare changes](https://github.com/nrjdalal/rate-my-ott/compare/v0.0.3...v0.0.4)

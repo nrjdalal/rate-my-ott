@@ -22,31 +22,105 @@ describe("lookupKey", () => {
 })
 
 describe("titleSpellings", () => {
-  test("tries the title as given, then without a qualifier, then without a subtitle", () => {
-    expect(titleVariants("The Office (U.S.)")).toEqual(["The Office (U.S.)", "The Office"])
+  test("tries the title as given, then without a qualifier, then without a subtitle, each with its article dropped or put on", () => {
+    expect(titleVariants("The Office (U.S.)")).toEqual([
+      "The Office (U.S.)",
+      "Office (U.S.)",
+      "The Office",
+      "Office",
+    ])
     expect(titleVariants("Grand Theft Auto VI: An Extended Look")).toEqual([
       "Grand Theft Auto VI: An Extended Look",
+      "The Grand Theft Auto VI: An Extended Look",
       "Grand Theft Auto VI",
+      "The Grand Theft Auto VI",
+      "An Extended Look",
+      "Extended Look",
     ])
     expect(titleVariants("  Dune  (2021): Part  One ")).toEqual([
       "Dune (2021): Part One",
+      "Dune (2021): Part 1",
+      "The Dune (2021): Part One",
+      "The Dune (2021): Part 1",
       "Dune: Part One",
+      "Dune: Part 1",
+      "The Dune: Part One",
+      "The Dune: Part 1",
       "Dune",
+      "The Dune",
+      "Part One",
+      "Part 1",
+      "The Part One",
+      "The Part 1",
     ])
-    expect(titleVariants("Dune")).toEqual(["Dune"])
-    expect(titleVariants("(2021)")).toEqual(["(2021)"])
+    expect(titleVariants("Dune")).toEqual(["Dune", "The Dune"])
+    expect(titleVariants("(2021)")).toEqual(["(2021)", "The (2021)"])
   })
 
-  test("only the unsubtitled spelling is loose, and never when it is the title itself", () => {
+  test("the article is dropped whichever it is, and the platform's spelling always comes first", () => {
+    expect(titleVariants("Devil's Advocate")).toEqual(["Devil's Advocate", "The Devil's Advocate"])
+    expect(titleVariants("A Quiet Place")).toEqual(["A Quiet Place", "Quiet Place"])
+    expect(titleVariants("An Education")).toEqual(["An Education", "Education"])
+    expect(titleVariants("the office")).toEqual(["the office", "office"])
+    // A word that merely starts like an article is left alone, and so is the article on its own.
+    expect(titleVariants("Theodore")).toEqual(["Theodore", "The Theodore"])
+    expect(titleVariants("The")).toEqual(["The", "The The"])
+  })
+
+  test("a standalone number is also spelled the other way, digits as words or words as digits", () => {
+    expect(titleVariants("Fear Street Part 1: 1994")).toEqual([
+      "Fear Street Part 1: 1994",
+      "Fear Street Part One: 1994",
+      "The Fear Street Part 1: 1994",
+      "The Fear Street Part One: 1994",
+      "Fear Street Part 1",
+      "Fear Street Part One",
+      "The Fear Street Part 1",
+      "The Fear Street Part One",
+      "1994",
+      "The 1994",
+    ])
+    expect(titleVariants("Part One")).toEqual(["Part One", "Part 1", "The Part One", "The Part 1"])
+    // A year, a number inside a word, and numbers past ten are left alone.
+    expect(titleVariants("Se7en")).toEqual(["Se7en", "The Se7en"])
+    expect(titleVariants("Blade Runner 2049")).toEqual([
+      "Blade Runner 2049",
+      "The Blade Runner 2049",
+    ])
+    expect(titleVariants("Ocean's 11")).toEqual(["Ocean's 11", "The Ocean's 11"])
+  })
+
+  test("spellings come in tiers: the platform's own, its article variants, then the loose ones, of which the subtitle alone must be a work of its own", () => {
     expect(titleSpellings("The Office (U.S.)")).toEqual([
-      { loose: false, spelling: "The Office (U.S.)" },
-      { loose: false, spelling: "The Office" },
+      { own: false, spelling: "The Office (U.S.)", tier: 0 },
+      { own: false, spelling: "Office (U.S.)", tier: 1 },
+      { own: false, spelling: "The Office", tier: 0 },
+      { own: false, spelling: "Office", tier: 1 },
     ])
     expect(titleSpellings("Dune: Part Two")).toEqual([
-      { loose: false, spelling: "Dune: Part Two" },
-      { loose: true, spelling: "Dune" },
+      { own: false, spelling: "Dune: Part Two", tier: 0 },
+      { own: false, spelling: "Dune: Part 2", tier: 0 },
+      { own: false, spelling: "The Dune: Part Two", tier: 1 },
+      { own: false, spelling: "The Dune: Part 2", tier: 1 },
+      { own: false, spelling: "Dune", tier: 2 },
+      { own: false, spelling: "The Dune", tier: 2 },
+      { own: true, spelling: "Part Two", tier: 2 },
+      { own: true, spelling: "Part 2", tier: 2 },
+      { own: true, spelling: "The Part Two", tier: 2 },
+      { own: true, spelling: "The Part 2", tier: 2 },
     ])
-    expect(titleSpellings("Dune")).toEqual([{ loose: false, spelling: "Dune" }])
+    expect(titleVariants("Half Bad: The Bastard Son & The Devil Himself")).toEqual([
+      "Half Bad: The Bastard Son & The Devil Himself",
+      "The Half Bad: The Bastard Son & The Devil Himself",
+      "Half Bad",
+      "The Half Bad",
+      "The Bastard Son & The Devil Himself",
+      "Bastard Son & The Devil Himself",
+    ])
+    expect(titleSpellings("Dune")).toEqual([
+      { own: false, spelling: "Dune", tier: 0 },
+      { own: false, spelling: "The Dune", tier: 1 },
+    ])
   })
 })
 

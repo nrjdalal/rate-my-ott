@@ -140,6 +140,36 @@ export const addAka = (spellings: Spellings, aka: ImdbAka): boolean => {
   return true
 }
 
+// The short names a well-known title also answers to: what stands before the first colon or spaced dash in its own names ("Bleach" for "Bleach: Thousand-Year Blood War", "Tokyo Ghoul" for "Tokyo Ghoul:re", "Dahmer" for "Dahmer - Monster: The Jeffrey Dahmer Story"), since a platform shows a season or a sequel under the parent's bare name. Indexed as alternate names, so a title's own name always outranks them, and only for a well-known title, or every "Alpha: Something" would answer to "Alpha".
+const SUBTITLE_SEPARATOR = /:|\s-\s/
+export const shortNames = (
+  basics: Pick<ImdbBasics, "originalTitle" | "primaryTitle" | "titleType">,
+): string[] => {
+  // A series only: a platform shows a season under the parent's bare name, but a subtitled film is another work, and "Home: Something" must not answer to "Home".
+  if (imdbType(basics.titleType) !== "series") return []
+  const own = nameKeys(basics)
+  const keys: string[] = []
+  for (const name of [basics.primaryTitle, basics.originalTitle]) {
+    const [head] = name.split(SUBTITLE_SEPARATOR)
+    if (head === undefined || head === name) continue
+    const key = searchKey(head)
+    if (key && !own.includes(key) && !keys.includes(key)) keys.push(key)
+  }
+  return keys
+}
+
+export const addShortNames = (spellings: Spellings, basics: ImdbBasics): number => {
+  const known = spellings.get(basics.id)
+  if (!known) return 0
+  let added = 0
+  for (const key of shortNames(basics)) {
+    if (known.own.includes(key) || known.akas.includes(key)) continue
+    known.akas.push(key)
+    added += 1
+  }
+  return added
+}
+
 // Whether a title earns a row: a kind the index keeps, not adult, named, and either rated already or recent enough (this year or last) to be rated soon; a short or a video only once it is known. An old title nobody has voted on is never behind a card, and leaving it out keeps the table small.
 export const keepTitle = (basics: ImdbBasics, rating: ImdbRating | null, year: number): boolean => {
   if (imdbType(basics.titleType) === null || basics.isAdult || basics.primaryTitle === "")
@@ -193,15 +223,19 @@ export const RUNTIME_MARGIN_MIN = 3
 export const OPEN_RUN_MIN_VOTES = 1000
 
 export type MatchOptions = {
-  // Accept only a candidate released the stated year exactly: for a spelling looser than the platform's (a subtitle dropped), a parent or a namesake is close enough to fool the tolerances.
+  // A film must have been released the stated year exactly: under a spelling that is not the platform's own (an article dropped or put on, a subtitle dropped, the subtitle alone), a year's tolerance would let "Dune" take "Dune: Part Two" or "The Kingdom" take last year's "Kingdom".
   exactYear?: boolean
+  // The spelling is the subtitle alone ("The Bastard Son & The Devil Himself" out of "Half Bad: ..."): a series must be a work of its own from the stated year, started within a year of it, never a parent that merely ran through it.
+  fresh?: boolean
   // The current year, for a series whose run is open.
   now?: number
+  // The spelling is the name without its subtitle, which names a parent as easily as a namesake: a series is taken only when it is well known (a subtitled series is a season of it, "Monster: The Ed Gein Story" is IMDb's "Monster"), since a real spin-off has an entry of its own that a tighter spelling finds first.
+  parent?: boolean
 }
 
 const votesOf = (title: ImdbTitle) => title.votes ?? 0
 
-// Whether a candidate can be the title the platform showed, given what the platform stated (the name already matches). The kind must agree. A film's year within a year of its release; a series when the stated year falls in its run, a year either side, since a platform states a show's latest season rather than its premiere; a run with no end year reaches the present only for a well-known show. A film's runtime within five minutes when both are known. A field the index lacks cannot be checked and does not disqualify here (except a missing year when the year must be exact); pickImdbTitle drops such a candidate once another can be checked.
+// Whether a candidate can be the title the platform showed, given what the platform stated (the name already matches). The kind must agree. A film's year within a year of its release; a series when the stated year falls in its run, a year either side, since a platform states a show's latest season rather than its premiere; a run with no end year reaches the present only for a well-known show. A film's runtime within ten minutes when both are known. A field the index lacks cannot be checked and does not disqualify here (except a missing year when the year must be exact); pickImdbTitle drops such a candidate once another can be checked.
 export function fitsQuery(
   title: ImdbTitle,
   query: TitleQuery,
@@ -211,7 +245,15 @@ export function fitsQuery(
   const kind = imdbType(title.titleType)
   if (query.type && kind !== query.type) return false
   if (query.year && title.startYear !== null) {
-    if (options.exactYear && title.startYear !== query.year) return false
+    if (options.exactYear && kind !== "series" && title.startYear !== query.year) return false
+    if (
+      options.fresh &&
+      kind === "series" &&
+      Math.abs(title.startYear - query.year) > YEAR_TOLERANCE
+    ) {
+      return false
+    }
+    if (options.parent && kind === "series" && votesOf(title) < OPEN_RUN_MIN_VOTES) return false
     if (kind === "series") {
       if (query.year < title.startYear - YEAR_TOLERANCE) return false
       if (title.endYear !== null) {
@@ -236,7 +278,7 @@ export function fitsQuery(
   return true
 }
 
-// Among the candidates that fit, the one the platform meant, or null when that is not certain: no answer beats a wrong one. Nothing is taken without a stated year. A candidate that fits under its own name outranks the ones that fit only under an alternate name, which are taken only when one alone fits. Once any candidate can be checked against what was stated (a known year, a known runtime for a film when one was stated), the ones that cannot drop out, and they still veto the pick when one of them is far more popular. One left is the answer. Several of both kinds with no kind stated are an ambiguity. Several rank by closest runtime (a film, when one was stated), then votes, and the best is taken only when something separates it from the runner-up: a runtime closer by a clear margin, or votes that dominate, which is denied under a loose spelling and whenever a candidate in the running is too new to have earned its votes (unrated, or under the floor and from this year or last): that one is as likely the platform's as the popular twin.
+// Among the candidates that fit, the one the platform meant, or null when that is not certain: no answer beats a wrong one. Nothing is taken without a stated year. A candidate that fits under its own name outranks the ones that fit only under an alternate name, which are taken only when one alone fits. Once any candidate can be checked against what was stated (a known year, a known runtime for a film when one was stated), the ones that cannot drop out, and they still veto the pick when one of them is far more popular. One left is the answer. Several of both kinds with no kind stated are an ambiguity. Several rank by closest runtime (a film, when one was stated), then votes, and the best is taken only when something separates it from the runner-up: a runtime closer by a clear margin, or votes that dominate, which is denied under a loose spelling and whenever a candidate in the running is too new to have earned its votes (unrated, or under the floor and from this year or last) and sits as close to the stated year as the best: that one is as likely the platform's as the popular twin. A year further off than the best is not: the platform states a year, and a new namesake a year either side of it is the tolerance at work, not the title. Nor is one a stated runtime fits no better than the best: a namesake of the same year and length is a duplicate listing, not a rival.
 export function pickImdbTitle(
   candidates: ImdbTitle[],
   query: TitleQuery,
@@ -273,9 +315,21 @@ export function pickImdbTitle(
   if (!query.type && new Set(pool.map((title) => imdbType(title.titleType))).size > 1) return null
   const next = ranked[1] as ImdbTitle
   if (Number.isFinite(gap(top)) && gap(next) - gap(top) >= RUNTIME_MARGIN_MIN) return top
+  const year = query.year
+  const yearGap = (title: ImdbTitle) =>
+    title.startYear === null ? 0 : Math.abs(title.startYear - year)
+  // A year further off the stated one than a well-known best is the tolerance at work, not the title; the same year and, to within the margin, the same stated length is a duplicate listing.
+  const furtherOff = (title: ImdbTitle) =>
+    yearGap(title) > yearGap(top) && votesOf(top) >= OPEN_RUN_MIN_VOTES
+  const duplicate = (title: ImdbTitle) =>
+    title.startYear === top.startYear &&
+    Number.isFinite(gap(top)) &&
+    Math.abs(gap(title) - gap(top)) < RUNTIME_MARGIN_MIN
   const tooNew = (title: ImdbTitle) =>
-    title.votes === null ||
-    (title.votes < DOMINANT_MIN_VOTES && (title.startYear ?? now) >= now - 1)
+    (title.votes === null ||
+      (title.votes < DOMINANT_MIN_VOTES && (title.startYear ?? now) >= now - 1)) &&
+    !furtherOff(title) &&
+    !duplicate(title)
   if (
     !options.exactYear &&
     !pool.some(tooNew) &&
@@ -287,21 +341,58 @@ export function pickImdbTitle(
   return null
 }
 
-// The title the index holds for a query, spelling by spelling (as the platform wrote it, then without a parenthetical qualifier, then without a subtitle after a colon), stopping at the first spelling any candidate fits: what fits under the platform's own spelling is either the answer or an ambiguity, never a reason to try a looser one. The unsubtitled spelling names a parent or a namesake as easily as the title, so it is taken only for the stated year exactly.
-export function resolveTitle(
+// Why an answer has no score, for the extension to explain a bare card: no year to check against (unstated), nothing in the index under any of the platform's own spellings (unknown), namesakes that fit nothing stated (unmatched), candidates that fit but none certain (ambiguous), or a title IMDb lists that nobody has rated yet (unrated).
+export const REASONS = ["ambiguous", "unknown", "unmatched", "unrated", "unstated"] as const
+export type Reason = (typeof REASONS)[number]
+export type MissReason = Exclude<Reason, "unrated">
+export type Outcome = { reason: MissReason; title: null } | { reason: null; title: ImdbTitle }
+
+// The title the index holds for a query, spelling by spelling in tiers (the platform's own, then with the article dropped or put on, then loose: without its subtitle, or the subtitle alone), stopping at the first spelling any candidate fits: what fits under the platform's own spelling is either the answer or an ambiguity, never a reason to try a looser one, and a tier is tried only while the index knows nothing under the tiers above. The unsubtitled spelling names a namesake as easily as the title, so a film is taken under it only for the stated year exactly, and a series only when it is well known and running that year (a subtitled series is a season of it). Only a hit under the platform's own spellings makes the name known; a parent refused under the loose one is not a namesake.
+export function resolveOutcome(
   query: TitleQuery,
   candidatesFor: (spelling: string) => ImdbTitle[],
   now?: number,
-): ImdbTitle | null {
-  for (const { loose, spelling } of titleSpellings(query.title)) {
+): Outcome {
+  if (!query.year) return resolveUnstated(query, candidatesFor)
+  // The loose tier is tried only while the index knows nothing under the name as written or with its article moved: a spin-off whose own entry misfits (a stale end year) must not fall through to its parent's score. An article variant is always tried, after the name as written: "Devil's Advocate" has namesakes of its own that misfit, and the film is "The Devil's Advocate".
+  let known = false
+  for (const { own, spelling, tier } of titleSpellings(query.title)) {
+    if (tier === 2 && known) break
     const candidates = candidatesFor(spelling)
     if (candidates.length === 0) continue
-    const options: MatchOptions = { exactYear: loose, now }
+    if (tier < 2) known = true
+    const options: MatchOptions =
+      tier === 0
+        ? { now }
+        : tier === 1
+          ? { exactYear: true, now }
+          : own
+            ? { exactYear: true, fresh: true, now }
+            : { exactYear: true, now, parent: true }
     if (!candidates.some((candidate) => fitsQuery(candidate, query, options))) continue
-    return pickImdbTitle(candidates, query, options)
+    const title = pickImdbTitle(candidates, query, options)
+    return title ? { reason: null, title } : { reason: "ambiguous", title: null }
   }
-  return null
+  return { reason: known ? "unmatched" : "unknown", title: null }
 }
+
+// Without a stated year (a search result) nothing is taken, however unique the name: a new title IMDb lists under its original name would wear a namesake's score (Netflix's Mexican "Lovesick" of 2026 against the British series). The name is still looked up under the platform's own spellings, so the popup can tell a name the index lacks (unknown) from a year Netflix withheld (unstated).
+function resolveUnstated(
+  query: TitleQuery,
+  candidatesFor: (spelling: string) => ImdbTitle[],
+): Outcome {
+  for (const { spelling, tier } of titleSpellings(query.title)) {
+    if (tier === 2) break
+    if (candidatesFor(spelling).length > 0) return { reason: "unstated", title: null }
+  }
+  return { reason: "unknown", title: null }
+}
+
+export const resolveTitle = (
+  query: TitleQuery,
+  candidatesFor: (spelling: string) => ImdbTitle[],
+  now?: number,
+): ImdbTitle | null => resolveOutcome(query, candidatesFor, now).title
 
 // The name rows a title no longer answers to, once its spellings are rewritten: what the index holds for it that the fresh spellings do not.
 export const staleNames = <T extends { key: string; titleId: string }>(
@@ -330,3 +421,39 @@ export async function* readGzipLines(
   rest += decoder.decode()
   if (rest) yield rest
 }
+
+// One answer as the API returns it: the title the index matched, or a miss that still says what was asked and why it missed. A found title nobody has rated yet says "unrated".
+export type Rating = {
+  found: boolean
+  imdbId: string | null
+  imdbRating: number | null
+  imdbVotes: number | null
+  reason: Reason | null
+  title: string
+  type: TitleType | "unknown"
+  year: number | null
+}
+
+// A miss keeps the asked-for title, year, and type, so the answer still says what was looked up.
+export const toRating = (query: TitleQuery, outcome: Outcome): Rating =>
+  outcome.title
+    ? {
+        found: true,
+        imdbId: outcome.title.id,
+        imdbRating: outcome.title.rating,
+        imdbVotes: outcome.title.votes,
+        reason: outcome.title.rating === null ? "unrated" : null,
+        title: outcome.title.primaryTitle,
+        type: imdbType(outcome.title.titleType) ?? "unknown",
+        year: outcome.title.startYear,
+      }
+    : {
+        found: false,
+        imdbId: null,
+        imdbRating: null,
+        imdbVotes: null,
+        reason: outcome.reason,
+        title: query.title.trim(),
+        type: query.type ?? "unknown",
+        year: query.year ?? null,
+      }
