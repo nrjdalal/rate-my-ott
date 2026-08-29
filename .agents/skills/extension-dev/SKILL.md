@@ -20,7 +20,7 @@ source: local
 | The popup's "why no score" list: a tab's misses grouped by the API's `reason`, phrased | `utils/report.ts` (pure; tested from `tests/extension/wxt/utils/report.test.ts`) |
 | The typed client and `unwrap` | `utils/api.ts` |
 | The message protocol between page, popup/options, and background | `utils/messages.ts` |
-| Settings (API URL, on/off switches), synced storage | `utils/settings.ts` |
+| Settings (API URL, on/off switches, the dim threshold), synced storage | `utils/settings.ts` |
 | Popup and options UI (Tailwind, no shadcn) | `entrypoints/popup/`, `entrypoints/options/`, `components/` |
 | Manifest, permissions, dev port, icons | `wxt.config.ts` (icons come from `assets/icon.svg` via `@wxt-dev/auto-icons`) |
 

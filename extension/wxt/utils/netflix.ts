@@ -124,10 +124,22 @@ function scores(doc: Document, rating: Rating): HTMLElement[] {
   return out
 }
 
-// Idempotent: the card ends with exactly one badge (or none), whatever it had before.
-export function renderBadge(card: Element, rating: Rating | null, key = ""): void {
+// Whether a title's artwork is dimmed: only a title with a score under the threshold, never one without a score.
+export const shouldDim = (rating: Rating | null, dimBelow: number | null): boolean =>
+  dimBelow !== null && rating !== null && rating.imdbRating !== null && rating.imdbRating < dimBelow
+
+const DIM = "rmo-dim"
+
+// Idempotent: the card ends with exactly one badge (or none), whatever it had before, and its artwork dimmed only when the score and the threshold say so.
+export function renderBadge(
+  card: Element,
+  rating: Rating | null,
+  key = "",
+  dimBelow: number | null = null,
+): void {
   const host = badgeHost(card)
   host.querySelector(`:scope > .${BADGE}`)?.remove()
+  host.classList.toggle(DIM, shouldDim(rating, dimBelow))
   if (!rating || !rating.found) return
   const parts = scores(host.ownerDocument, rating)
   if (parts.length === 0) return
@@ -303,4 +315,5 @@ export function renderBillboardRating(anchor: HTMLElement, rating: Rating | null
 
 export function removeAll(root: ParentNode): void {
   for (const node of root.querySelectorAll(`.${BADGE}, .${PANEL}`)) node.remove()
+  for (const node of root.querySelectorAll(`.${DIM}`)) node.classList.remove(DIM)
 }

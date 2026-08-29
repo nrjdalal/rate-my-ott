@@ -26,6 +26,10 @@ Firefox keeps a temporary add-on until it closes; a signed build that stays inst
 
 Every title card gets a small yellow IMDb score in its top-right corner. The preview that opens when you hover a card shows "IMDb 5.4" beside its duration; the hero at the top of a page shows "• IMDb 8.5" in its metadata line; opening a title adds an "IMDb:" row with the score and vote count beside the cast and genres, linking to the IMDb page, and its "More Like This" cards get a badge too. A title with no score is either too new to have one, not on IMDb under that name, or a name several titles share that the extension refuses to guess between: a wrong score is worse than none. Search results stay bare, since Netflix states no year for them.
 
+## Options
+
+The popup switches the whole extension, or just the card badges, off and on. The options page (from the popup) has one more setting: **Dim low-rated titles** fades the artwork of any title rated below a threshold you pick (off by default), so the eye skips it without anything being hidden or moved; a title without a score is never dimmed, and the badge stays either way.
+
 ## Updating
 
 A new release is a new zip: unzip it over the old folder (or into a new one and load that), then click the reload icon on the extension's card. The [releases page](https://github.com/nrjdalal/rate-my-ott/releases) lists what changed.

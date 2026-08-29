@@ -19,7 +19,7 @@ import {
   renderPanel,
 } from "@/utils/netflix"
 import type { Miss, PageReport } from "@/utils/report"
-import { DEFAULT_SETTINGS, settings, type Settings } from "@/utils/settings"
+import { readSettings, settings, withDefaults, type Settings } from "@/utils/settings"
 
 // How long to collect newly seen titles before asking for them in one batch, and how often to rescan regardless of mutations (Netflix swaps artwork and virtualizes rows without always mutating what the observer watches).
 const FLUSH_MS = 250
@@ -36,7 +36,7 @@ export default defineContentScript({
   matches: ["*://*.netflix.com/*"],
   runAt: "document_idle",
   async main(ctx) {
-    let current: Settings = await settings.getValue()
+    let current: Settings = await readSettings()
     const answers = new Map<string, Rating | null>()
     // What this tab asked about, by query key, for the popup's "why no score" list.
     const asked = new Map<string, TitleQuery>()
@@ -106,7 +106,9 @@ export default defineContentScript({
           const rating = ask(query)
           const key = keyOf(query)
           asked.set(key, query)
-          if (rating !== undefined && !hasBadge(card, key)) renderBadge(card, rating, key)
+          if (rating !== undefined && !hasBadge(card, key)) {
+            renderBadge(card, rating, key, current.dimBelow)
+          }
         }
       }
       const billboard = readBillboard(document)
@@ -168,7 +170,7 @@ export default defineContentScript({
 
     // A settings change repaints from what is already known, and disabling clears the page.
     settings.watch((next) => {
-      current = next ?? DEFAULT_SETTINGS
+      current = withDefaults(next)
       failedAt.clear()
       removeAll(document)
       paint()

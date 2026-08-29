@@ -15,6 +15,7 @@ import {
   renderBadge,
   renderBillboardRating,
   renderPanel,
+  shouldDim,
 } from "../../../../extension/wxt/utils/netflix"
 
 // The current cards (a row card, a Top 10 card with its rank numeral, a Continue Watching card), the legacy slider and gallery cards, and a card with no title to skip.
@@ -111,6 +112,24 @@ describe("readCard", () => {
       year: 2015,
     })
     expect(readCard(empty as Element)).toBeNull()
+  })
+
+  test("a title under the dim threshold fades its artwork; one without a score never does", () => {
+    const doc = page(CARDS)
+    const card = findCards(doc)[4] as Element
+    expect(shouldDim(rating({ imdbRating: 5.4 }), 6)).toBe(true)
+    expect(shouldDim(rating({ imdbRating: 6 }), 6)).toBe(false)
+    expect(shouldDim(rating({ imdbRating: null }), 6)).toBe(false)
+    expect(shouldDim(rating({ found: false, imdbRating: null }), 6)).toBe(false)
+    expect(shouldDim(rating({ imdbRating: 5.4 }), null)).toBe(false)
+    renderBadge(card, rating({ imdbRating: 5.4 }), "k", 6)
+    const host = doc.querySelector(".rmo-badge")?.parentElement
+    expect(host?.classList.contains("rmo-dim")).toBe(true)
+    renderBadge(card, rating({ imdbRating: 7.2 }), "k", 6)
+    expect(host?.classList.contains("rmo-dim")).toBe(false)
+    renderBadge(card, rating({ imdbRating: 5.4 }), "k", 6)
+    removeAll(doc)
+    expect(doc.querySelector(".rmo-dim")).toBeNull()
   })
 
   test("a painted score names the query it answers, so another title on the same element is painted again", () => {

@@ -5,7 +5,7 @@ import { storage } from "wxt/utils/storage"
 import { createApiClient, unwrap, type Rating, type TitleQuery } from "@/utils/api"
 import type { HealthReply, IndexReply, LatestReply, LookupReply, Message } from "@/utils/messages"
 import type { PageReport } from "@/utils/report"
-import { settings } from "@/utils/settings"
+import { readSettings } from "@/utils/settings"
 
 // The only context that talks to the API: it holds the host permission that lets a cross-origin call skip CORS, and one place to batch and cache keeps every Netflix tab from asking twice.
 
@@ -21,7 +21,7 @@ const cacheKey = (query: TitleQuery): `session:${string}` =>
   `session:rating:${query.title.trim().toLowerCase()}|${query.year ?? ""}|${query.type ?? ""}|${query.runtime ?? ""}`
 
 async function lookup(titles: TitleQuery[]): Promise<LookupReply> {
-  const current = await settings.getValue()
+  const current = await readSettings()
   if (!current.enabled) return { error: "disabled", ratings: titles.map(() => null) }
   const keys = titles.map(cacheKey)
   const now = Date.now()
@@ -55,13 +55,13 @@ async function lookup(titles: TitleQuery[]): Promise<LookupReply> {
 }
 
 async function health(): Promise<HealthReply> {
-  const current = await settings.getValue()
+  const current = await readSettings()
   const { data, error } = await unwrap(createApiClient(current.apiUrl).health.$get())
   return error ? { error: error.message, version: null } : { error: null, version: data.version }
 }
 
 async function indexStatus(): Promise<IndexReply> {
-  const current = await settings.getValue()
+  const current = await readSettings()
   const { data, error } = await unwrap(createApiClient(current.apiUrl).v1.ratings.status.$get())
   return error ? { error: error.message, index: null } : { error: null, index: data.index }
 }
