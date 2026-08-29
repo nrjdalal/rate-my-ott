@@ -12,7 +12,7 @@ import {
   hasPanel,
   readBillboard,
   readCard,
-  readModal,
+  readModals,
   removeAll,
   renderBadge,
   renderBillboardRating,
@@ -97,8 +97,7 @@ export default defineContentScript({
           renderBillboardRating(billboard.anchor, rating, key)
         }
       }
-      const modal = readModal(document)
-      if (modal) {
+      for (const modal of readModals(document)) {
         const rating = ask(modal.query)
         const key = keyOf(modal.query)
         items.push({ key, query: modal.query })

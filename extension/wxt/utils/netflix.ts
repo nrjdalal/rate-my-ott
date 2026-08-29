@@ -180,10 +180,20 @@ function modalTitle(root: ParentNode, modal: HTMLElement): string | undefined {
 }
 
 // The open title modal, if any, with its title and the year and kind its stamp or metadata row states, which is what lets the lookup disambiguate a remake. The anchor is the details column (the detail modal) or the metadata line (the hover preview, which has no details) the rating joins.
-export function readModal(root: ParentNode): ModalInfo | null {
-  const modal = root.querySelector<HTMLElement>(MODAL_SELECTOR)
-  if (!modal) return null
-  const title = modalTitle(root, modal)
+// Every modal open at once: the detail modal, the hover preview, and on a legacy page the preview that lingers while the next one animates in beside it, since the one the viewer is looking at is not always the first in the document.
+export const readModals = (root: ParentNode): ModalInfo[] =>
+  [...root.querySelectorAll<HTMLElement>(MODAL_SELECTOR)].flatMap((modal) => {
+    const info = readOneModal(root, modal)
+    return info ? [info] : []
+  })
+
+export const readModal = (root: ParentNode): ModalInfo | null => readModals(root)[0] ?? null
+
+function readOneModal(root: ParentNode, modal: HTMLElement): ModalInfo | null {
+  const id = modal.getAttribute("data-rmo-id")
+  const twin = id ? root.querySelector(`[data-rmo-id="${id}"]:not(${MODAL_SELECTOR})`) : null
+  // A legacy preview's stamp may carry no title (its card was recycled by the time it was stamped); the card it hovers over, found by the id, still spells it.
+  const title = modalTitle(root, modal) || (twin ? readCard(twin)?.title : undefined)
   if (!title) return null
   const details = modal.querySelector<HTMLElement>(".previewModal--detailsMetadata-right")
   const line = modal.querySelector<HTMLElement>(".videoMetadata--line")
@@ -203,8 +213,6 @@ export function readModal(root: ParentNode): ModalInfo | null {
       : undefined
   // The modal's own stamp names the page's year and kind when its props carry them (the hover preview's do not, only its id and title); the card it opened from or hovers over, found by the jbv in the URL or by the same stamped id, is the next source, and the modal's metadata text the last.
   const own = stampedMeta(modal)
-  const id = modal.getAttribute("data-rmo-id")
-  const twin = id ? root.querySelector(`[data-rmo-id="${id}"]:not(${MODAL_SELECTOR})`) : null
   const fromCard = stampedMeta(modalCard(root) ?? twin ?? modal)
   const stamped = { ...fromCard, ...own }
   const year = stamped.year ?? parsedYear

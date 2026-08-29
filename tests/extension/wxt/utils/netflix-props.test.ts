@@ -235,6 +235,29 @@ describe("readEntity", () => {
     expect(readEntity(modalCard("No id", { title: "No id" }))).toBeNull()
   })
 
+  test("a hover preview that names only its id is stamped with it, and with the hovered card's title", () => {
+    const window = new Window({ url: "https://www.netflix.com/browse/genre/83" })
+    window.document.body.innerHTML = `<div class="title-card" data-rmo-meta data-rmo-id="82048302" data-rmo-title="MOURINHO" data-rmo-year="2026" data-rmo-type="series"></div><div class="previewModal--container mini-modal"><a href="/title/82048302?dpRightClick=1">MOURINHO</a><a href="/watch/82048399?trackId=1">Play</a></div>`
+    const modal = window.document.querySelector(".previewModal--container") as unknown as Element
+    const state = {
+      modalState: "MINI_MODAL",
+      unifiedEntityId: "Video:82048302",
+      videoId: 82048302,
+      videoModel: undefined,
+    }
+    ;(modal as unknown as Record<string, unknown>)["__reactFiber$abc123"] = {
+      memoizedProps: { className: "previewModal--container" },
+      return: { memoizedProps: { previewModalState: state }, return: null },
+    }
+    expect(readEntity(modal)).toEqual({ title: "MOURINHO", videoId: 82048302 })
+    // The card gone (scrolled out and recycled), the id alone is still the stamp.
+    window.document.querySelector(".title-card")?.remove()
+    expect(readEntity(modal)).toEqual({ title: "", videoId: 82048302 })
+    // A preview whose links name another title (a stale one mid-transition) is not stamped with this id.
+    ;(modal.querySelector("a") as Element).setAttribute("href", "/title/70000001")
+    expect(readEntity(modal)).toBeNull()
+  })
+
   test("the billboard reads its play button's entity and drops the promoted season from the title", () => {
     const window = new Window({ url: "https://www.netflix.com/browse" })
     window.document.body.innerHTML = `<section data-uia="billboard"></section>`

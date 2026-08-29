@@ -28,6 +28,10 @@ In Chrome, open `chrome://extensions`, turn on **Developer mode**, click **Load 
 
 The build bakes `WXT_PUBLIC_API_URL` from `.env` (`http://localhost:4000` by default, the fixed-port API) as the extension's API origin. Under portless the API is at `http://api.rate-my-ott.localhost:1355` instead, so open the extension's **Options** page, paste that URL, and click **Test**: it should report the API version. A dev build already holds the host permission for both hosts, so no rebuild is needed.
 
+## 4. Crawl Netflix for a robustness pass
+
+With `agent-browser` installed and a profile logged in to Netflix (`~/.agent-browser/profiles/rate-my-ott-netflix`), `bun run crawl` walks a dozen pages headless with the production build: it scrolls each to the bottom, hovers and opens sample titles, reads the popup's report, and writes every stamped card to `extension/wxt/.output/crawl/crawl.jsonl`. `bun run crawl:report` replays every unbadged title against the API (`RMO_API_URL`, default the local one) and, with `POSTGRES_URL` set and `psql` installed, shows what the index holds under its name, so a matching gap is a line to reason about rather than a hunch. `CRAWL_PAGES` (one URL per line), `CRAWL_BUILD`, and `CRAWL_PROFILE` override the defaults.
+
 ## Production builds
 
 `bun run build` writes `extension/wxt/.output/chrome-mv3` without the dev client, and `cd extension/wxt && bun run zip` packs it. `cd extension/wxt && bun run build:firefox` writes `.output/firefox-mv3` (Manifest V3 there too, with the add-on id a signed update channel keys on); load it from `about:debugging` as a temporary add-on. The release workflow builds both against the hosted API and attaches them to every GitHub release.

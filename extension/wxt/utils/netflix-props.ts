@@ -130,6 +130,23 @@ export function readEntity(card: Element, maxDepth = 40): Entity | null {
         const similar = fromVideo(props.video)
         if (similar && owns(similar)) return similar
       }
+      // The hover preview on a legacy page names only the id it is about (previewModalState.videoId, no videoModel); the card it hovers over, stamped with that id, states the title and the rest. The preview's own links (the title, the episode to play) must name the same id.
+      if (label === null && isRecord(props.previewModalState)) {
+        const state = props.previewModalState
+        const id =
+          typeof state.videoId === "number"
+            ? state.videoId
+            : typeof state.unifiedEntityId === "string"
+              ? Number(state.unifiedEntityId.split(":")[1])
+              : Number.NaN
+        if (Number.isInteger(id)) {
+          const twin = card.ownerDocument.querySelector(
+            `[data-rmo-id="${id}"]:not(.previewModal--container)`,
+          )
+          const entity = { title: twin?.getAttribute("data-rmo-title") ?? "", videoId: id }
+          if (owns(entity)) return entity
+        }
+      }
       if (
         videoId === undefined &&
         typeof props.videoId === "number" &&

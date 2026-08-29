@@ -11,6 +11,7 @@ import {
   readBillboard,
   readCard,
   readModal,
+  readModals,
   removeAll,
   renderBadge,
   renderBillboardRating,
@@ -285,6 +286,27 @@ describe("the hover preview", () => {
     const alone = page(MINI.replace(/<a [^>]*>.*?<\/a>\n/s, ""))
     expect(readModal(alone)?.query).toEqual({ runtime: 105, title: "72 HOURS", type: "movie" })
     expect(readModal(page(MINI.replace(/ data-rmo-[a-z]+="[^"]*"| data-rmo-meta/g, "")))).toBeNull()
+  })
+})
+
+describe("readModals", () => {
+  test("reads every open preview, and a legacy preview stamped without a title from the card it hovers over", () => {
+    const doc = page(`
+  <div class="title-card" data-rmo-meta data-rmo-id="81667463" data-rmo-title="" data-rmo-year="2026" data-rmo-type="series"><a class="slider-refocus" href="/watch/81667463?tctx=1" aria-label="MOURINHO"><img alt=""></a></div>
+  <div class="title-card" data-rmo-meta data-rmo-id="70204957" data-rmo-title="Bleach" data-rmo-year="2022" data-rmo-type="series"><a class="slider-refocus" href="/watch/70204957?tctx=1" aria-label="Bleach"><img alt=""></a></div>
+  <div class="previewModal--container mini-modal" data-rmo-meta data-rmo-id="81667463" data-rmo-title=""><div class="videoMetadata--container"><div class="videoMetadata--line"><span class="duration">Limited Series</span></div></div></div>
+  <div class="previewModal--container mini-modal" data-rmo-meta data-rmo-id="70204957" data-rmo-title="Bleach"><div class="videoMetadata--container"><div class="videoMetadata--line"><span class="duration">3 Seasons</span></div></div></div>
+`)
+    const modals = readModals(doc)
+    expect(modals.map((modal) => modal.query)).toEqual([
+      { title: "MOURINHO", type: "series", year: 2026 },
+      { title: "Bleach", type: "series", year: 2022 },
+    ])
+    expect(modals.every((modal) => modal.kind === "line")).toBe(true)
+    expect(readModal(doc)?.query.title).toBe("MOURINHO")
+    // A preview stamped without a title whose card is gone has nothing to be asked about.
+    doc.querySelector(".title-card")?.remove()
+    expect(readModals(doc).map((modal) => modal.query.title)).toEqual(["Bleach"])
   })
 })
 
