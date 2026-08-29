@@ -48,15 +48,16 @@ export function App() {
           Options
         </button>
         <span>
-          Ratings by{" "}
+          Information courtesy of{" "}
           <a
-            href="https://www.omdbapi.com"
+            href="https://www.imdb.com"
             target="_blank"
             rel="noopener noreferrer"
             className="hover:underline"
           >
-            OMDb
+            IMDb
           </a>
+          . Used with permission.
         </span>
       </footer>
     </main>

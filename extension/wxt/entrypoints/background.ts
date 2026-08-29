@@ -8,15 +8,15 @@ import { settings } from "@/utils/settings"
 
 // The only context that talks to the API: it holds the host permission that lets a cross-origin call skip CORS, and one place to batch and cache keeps every Netflix tab from asking twice.
 
-// What the API answers, remembered for the browser session (session storage survives service-worker restarts and clears when the browser closes, so it cannot grow across sessions); the API holds the durable cache.
+// What the API answers, remembered for the browser session (session storage survives service-worker restarts and clears when the browser closes, so it cannot grow across sessions); the API itself answers from its index every time.
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000
 const BATCH = 50
 
 type Cached = { at: number; rating: Rating }
 
-// A local key for the session cache only; the API keys its own cache, and results are matched to requests by position, so this need not reproduce its normalization.
+// A local key for the session cache only; results are matched to requests by position, so this need not reproduce the API's normalization, but everything that changes an answer (the runtime too) is part of it.
 const cacheKey = (query: TitleQuery): `session:${string}` =>
-  `session:rating:${query.title.trim().toLowerCase()}|${query.year ?? ""}|${query.type ?? ""}`
+  `session:rating:${query.title.trim().toLowerCase()}|${query.year ?? ""}|${query.type ?? ""}|${query.runtime ?? ""}`
 
 async function lookup(titles: TitleQuery[]): Promise<LookupReply> {
   const current = await settings.getValue()

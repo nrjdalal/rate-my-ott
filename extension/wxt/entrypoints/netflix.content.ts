@@ -21,8 +21,10 @@ import { DEFAULT_SETTINGS, settings, type Settings } from "@/utils/settings"
 const FLUSH_MS = 250
 const RESCAN_MS = 2000
 const OBSERVE_MS = 100
-// How long a current card may stay unstamped before it is looked up by title alone: the MAIN-world script stamps within a scan or two, and a page where it never does (Netflix moved its internals) still gets badges, just less precise ones.
+// How long a card may stay unstamped before it is looked up by title alone: the MAIN-world script stamps within a scan or two, and a page where it never does (Netflix moved its internals) still gets badges, just less precise ones.
 const STAMP_WAIT_MS = 2500
+// How long a lookup that failed (the API down, a batch refused) is left alone before the page asks again; every rescan would otherwise repeat the same failing request.
+const FAILED_RETRY_MS = 30000
 
 // The page's own bookkeeping key; results are matched to requests by position, so this only has to be stable within the page.
 const keyOf = (query: TitleQuery) =>
@@ -34,6 +36,7 @@ export default defineContentScript({
   async main(ctx) {
     let current: Settings = await settings.getValue()
     const answers = new Map<string, Rating | null>()
+    const failedAt = new Map<string, number>()
     const firstSeen = new Map<string, number>()
     const inflight = new Set<string>()
     const pending = new Map<string, TitleQuery>()
@@ -43,6 +46,8 @@ export default defineContentScript({
     const ask = (query: TitleQuery): Rating | null | undefined => {
       const key = keyOf(query)
       if (answers.has(key)) return answers.get(key)
+      const failed = failedAt.get(key)
+      if (failed !== undefined && Date.now() - failed < FAILED_RETRY_MS) return undefined
       if (!inflight.has(key)) {
         inflight.add(key)
         pending.set(key, query)
@@ -69,14 +74,13 @@ export default defineContentScript({
             ...(info.type ? { type: info.type } : {}),
             ...(info.year ? { year: info.year } : {}),
           })
-          if (rating !== undefined && !hasBadge(card)) renderBadge(card, rating, current)
+          if (rating !== undefined && !hasBadge(card)) renderBadge(card, rating)
         }
       }
       const modal = readModal(document)
       if (modal) {
         const rating = ask(modal.query)
-        if (rating !== undefined && !hasPanel(modal.anchor))
-          renderPanel(modal.anchor, rating, current)
+        if (rating !== undefined && !hasPanel(modal.anchor)) renderPanel(modal.anchor, rating)
       }
     }
 
@@ -92,12 +96,14 @@ export default defineContentScript({
       } catch (error) {
         reply = { error: error instanceof Error ? error.message : String(error), ratings: [] }
       }
+      const now = Date.now()
       batch.forEach(([key], index) => {
         inflight.delete(key)
-        // A failed lookup is forgotten rather than cached as a miss, so the next rescan asks again.
+        // A failed lookup is not cached as a miss: it is asked again after a pause, so an outage or a refused batch neither sticks nor floods.
         const rating = reply.ratings[index]
         if (rating !== undefined && rating !== null) answers.set(key, rating)
         else if (!reply.error) answers.set(key, null)
+        else failedAt.set(key, now)
       })
       if (reply.error && reply.error !== "disabled") console.warn("[rate-my-ott]", reply.error)
       paint()
@@ -116,7 +122,7 @@ export default defineContentScript({
       }
     }
 
-    // A settings change repaints from what is already known: the display options are read at render time, and disabling clears the page.
+    // A settings change repaints from what is already known, and disabling clears the page.
     settings.watch((next) => {
       current = next ?? DEFAULT_SETTINGS
       removeAll(document)
