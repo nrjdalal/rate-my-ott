@@ -185,12 +185,46 @@ describe("readBillboard and renderBillboardRating", () => {
   })
 })
 
+// The preview's own stamp has only the id and title; the card it hovers over (same id) has the year, kind, and length.
+const MINI = `
+<a href="/browse?jbv=81715790" aria-label="72 HOURS" data-uia="standard-card" data-rmo-meta data-rmo-id="81715790" data-rmo-year="2026" data-rmo-type="movie" data-rmo-runtime="105"><div><img alt=""></div></a>
+<div class="previewModal--container mini-modal" data-rmo-meta data-rmo-id="81715790" data-rmo-title="72 HOURS">
+  <div data-uia="videoMetadata--container" class="videoMetadata--container"><div class="videoMetadata--line"><div class="maturity-rating"><span class="maturity-number">A</span></div><span class="duration">1h 45m</span><span class="player-feature-badge">HD</span></div></div>
+</div>
+`
+
+describe("the hover preview", () => {
+  test("reads its stamp for the title, year, and kind, and adds the rating beside the duration", () => {
+    const doc = page(MINI)
+    const modal = readModal(doc)
+    expect(modal?.kind).toBe("line")
+    expect(modal?.query).toEqual({ runtime: 105, title: "72 HOURS", type: "movie", year: 2026 })
+    renderPanel(modal!.anchor, rating({ imdbRating: 5.4, imdbVotes: 20209 }))
+    renderPanel(modal!.anchor, rating({ imdbRating: 5.4, imdbVotes: 20209 }))
+    const items = [...modal!.anchor.querySelectorAll(".rmo-panel")]
+    expect(items.map((i) => i.className + ":" + i.textContent)).toEqual([
+      "duration rmo-panel:IMDb 5.4",
+    ])
+    expect(items[0]?.getAttribute("title")).toBe("20.2K votes on IMDb")
+    expect(hasPanel(modal!.anchor)).toBe(true)
+    renderPanel(modal!.anchor, rating({ found: false }))
+    expect(modal!.anchor.textContent).toBe("A1h 45mHD")
+  })
+
+  test("a preview whose card is gone keeps its title and its duration's kind but no year, and an unstamped one is nothing to ask about", () => {
+    const alone = page(MINI.replace(/<a [^>]*>.*?<\/a>\n/s, ""))
+    expect(readModal(alone)?.query).toEqual({ title: "72 HOURS", type: "movie" })
+    expect(readModal(page(MINI.replace(/ data-rmo-[a-z]+="[^"]*"| data-rmo-meta/g, "")))).toBeNull()
+  })
+})
+
 describe("readModal and renderPanel", () => {
   test("reads the title, year, and kind, and inserts the ratings row after the metadata", () => {
     const doc = page(MODAL)
     const modal = readModal(doc)
     expect(modal?.query).toEqual({ title: "Dune", type: "movie", year: 2021 })
     expect(modal?.anchor.className).toBe("previewModal--detailsMetadata-right")
+    expect(modal?.kind).toBe("details")
 
     renderPanel(modal!.anchor, rating({ imdbId: "tt1160419", imdbRating: 8.0, imdbVotes: 900000 }))
     renderPanel(modal!.anchor, rating({ imdbId: "tt1160419", imdbRating: 8.0, imdbVotes: 900000 }))

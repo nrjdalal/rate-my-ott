@@ -98,6 +98,37 @@ describe("readEntity", () => {
     // A model higher up (a row's, a billboard's) that names another video is not the card's; the walk goes on and finds nothing.
     const stray = legacy({ releaseYear: 2018, summary: { id: 999, type: "movie" }, title: "Alpha" })
     expect(readEntity(stray)).toBeNull()
+    // A modal holds the same model under previewModalState.
+    const modal = (() => {
+      const window = new Window({ url: "https://www.netflix.com/browse" })
+      window.document.body.innerHTML = `<div class="previewModal--container mini-modal"></div>`
+      const node = window.document.querySelector("div") as unknown as Element
+      ;(node as unknown as Record<string, unknown>)["__reactFiber$p"] = {
+        memoizedProps: {},
+        return: {
+          memoizedProps: {
+            previewModalState: {
+              videoId: 81715790,
+              videoModel: {
+                releaseYear: 2026,
+                runtime: 6300,
+                summary: { id: 81715790, type: "movie" },
+                title: "72 HOURS",
+              },
+            },
+          },
+          return: null,
+        },
+      }
+      return node
+    })()
+    expect(readEntity(modal)).toEqual({
+      runtime: 105,
+      title: "72 HOURS",
+      type: "movie",
+      videoId: 81715790,
+      year: 2026,
+    })
     // The id falls back to the unified entity id; a model without either is not a card.
     expect(readEntity(legacy({ title: "X", unifiedEntityId: "Video:70155590" }))).toEqual({
       title: "X",

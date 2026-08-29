@@ -23,7 +23,7 @@ export const CARD_SELECTOR =
 // The hero at the top of a browse page; its rating joins the metadata line under the logo.
 export const BILLBOARD_SELECTOR = "[data-uia='billboard']"
 
-// The hover and detail modals share one container class; the detail one adds `detail-modal`.
+// The hover and detail modals share one container class; the detail one adds `detail-modal`, the hover one `mini-modal`.
 export const MODAL_SELECTOR = ".previewModal--container"
 
 const BADGE = "rmo-badge"
@@ -125,7 +125,8 @@ export function renderBadge(card: Element, rating: Rating | null): void {
   host.append(badge)
 }
 
-export type ModalInfo = { anchor: HTMLElement; query: TitleQuery }
+// Where a modal's rating goes: the detail modal's details column as an "IMDb:" row, the hover modal's metadata line as an item beside the duration.
+export type ModalInfo = { anchor: HTMLElement; kind: "details" | "line"; query: TitleQuery }
 
 // The title the open modal is about. Netflix renders titles as artwork, so it is read from where the page still spells it out: the ?jbv=<id> the modal puts in the URL names the card it opened from, whose aria-label is the title; failing that, the modal's own boxart or story art carries it as alt text, and the legacy logo image did too.
 // The card the open modal came from: the ?jbv=<id> in the URL names it.
@@ -144,20 +145,23 @@ function modalTitle(root: ParentNode, modal: HTMLElement): string | undefined {
     "img.previewModal--boxart[alt], img[class*='storyArt'][alt], img.previewModal--player-titleTreatment-logo[alt], [data-uia='title-treatment'] img[alt], .title-logo img[alt]",
   )
   return (
+    modal.getAttribute("data-rmo-title")?.trim() ||
     card?.getAttribute("aria-label")?.trim() ||
     art?.getAttribute("alt")?.trim() ||
     text(modal.querySelector("[data-uia='video-title']"))
   )
 }
 
-// The open title modal, if any, with its title and the year and kind its metadata row states, which is what lets the lookup disambiguate a remake. The anchor is the details column the rating row joins; a modal without one (the hover preview) gets no row, the card's badge already says it.
+// The open title modal, if any, with its title and the year and kind its stamp or metadata row states, which is what lets the lookup disambiguate a remake. The anchor is the details column (the detail modal) or the metadata line (the hover preview, which has no details) the rating joins.
 export function readModal(root: ParentNode): ModalInfo | null {
   const modal = root.querySelector<HTMLElement>(MODAL_SELECTOR)
   if (!modal) return null
   const title = modalTitle(root, modal)
   if (!title) return null
   const details = modal.querySelector<HTMLElement>(".previewModal--detailsMetadata-right")
-  if (!details) return null
+  const line = modal.querySelector<HTMLElement>(".videoMetadata--line")
+  const anchor = details ?? line
+  if (!anchor) return null
   const parsedYear = Number(text(modal.querySelector(".year"))?.match(/\d{4}/)?.[0]) || undefined
   const duration = text(modal.querySelector(".duration")) ?? ""
   // "6 Episodes", "3 Seasons", or "Limited Series" for a show; "2h 33m" for a film.
@@ -166,13 +170,18 @@ export function readModal(root: ParentNode): ModalInfo | null {
     : /\d+\s*h|\d+\s*m/i.test(duration)
       ? ("movie" as const)
       : undefined
-  // The card the modal opened from carries the page's own year and kind once stamped; the modal's metadata text is the fallback.
-  const stamped = stampedMeta(modalCard(root) ?? modal)
+  // The modal's own stamp names the page's year and kind when its props carry them (the hover preview's do not, only its id and title); the card it opened from or hovers over, found by the jbv in the URL or by the same stamped id, is the next source, and the modal's metadata text the last.
+  const own = stampedMeta(modal)
+  const id = modal.getAttribute("data-rmo-id")
+  const twin = id ? root.querySelector(`[data-rmo-id="${id}"]:not(${MODAL_SELECTOR})`) : null
+  const fromCard = stampedMeta(modalCard(root) ?? twin ?? modal)
+  const stamped = { ...fromCard, ...own }
   const year = stamped.year ?? parsedYear
   const type = stamped.type ?? parsedType
   const runtime = stamped.runtime
   return {
-    anchor: details,
+    anchor,
+    kind: details ? "details" : "line",
     query: {
       title,
       ...(runtime ? { runtime } : {}),
@@ -185,11 +194,21 @@ export function readModal(root: ParentNode): ModalInfo | null {
 export const hasPanel = (anchor: HTMLElement): boolean =>
   anchor.querySelector(`:scope > .${PANEL}`) !== null
 
-// The modal's rating, as one more row of its details column ("Cast:", "Genres:", "This Movie Is:"): Netflix's own row classes, so it reads as Netflix's, with the score and vote count linking to the IMDb page. Nothing at all for a miss or a title nobody has rated yet. Idempotent like the badge.
+// The modal's rating, as one more row of its details column ("Cast:", "Genres:", "This Movie Is:"): Netflix's own row classes, so it reads as Netflix's, with the score and vote count linking to the IMDb page. On the hover preview's metadata line instead, one more item cloned from the duration ("2h 20m  IMDb 5.4"). Nothing at all for a miss or a title nobody has rated yet. Idempotent like the badge.
 export function renderPanel(anchor: HTMLElement, rating: Rating | null): void {
   const doc = anchor.ownerDocument
   anchor.querySelector(`:scope > .${PANEL}`)?.remove()
   if (!rating || !rating.found || rating.imdbRating === null) return
+  if (anchor.classList.contains("videoMetadata--line")) {
+    const sibling = anchor.querySelector(".duration") ?? anchor.lastElementChild
+    const item = sibling ? (sibling.cloneNode(false) as HTMLElement) : doc.createElement("span")
+    item.classList.add(PANEL)
+    item.textContent = `IMDb ${oneDecimal(rating.imdbRating)}`
+    if (rating.imdbVotes !== null)
+      item.setAttribute("title", `${compactCount(rating.imdbVotes)} votes on IMDb`)
+    anchor.append(item)
+    return
+  }
   const row = doc.createElement("div")
   row.className = `previewModal--tags ${PANEL}`
   const label = doc.createElement("span")

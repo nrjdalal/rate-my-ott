@@ -1,6 +1,6 @@
 import { defineContentScript } from "wxt/utils/define-content-script"
 
-import { BILLBOARD_SELECTOR, CARD_SELECTOR, STAMP } from "@/utils/netflix"
+import { BILLBOARD_SELECTOR, CARD_SELECTOR, MODAL_SELECTOR, STAMP } from "@/utils/netflix"
 import { readBillboard, readEntity, type Entity } from "@/utils/netflix-props"
 
 // Runs in the page's own JS world (world: "MAIN"), where React's fiber properties are visible, and does one thing: stamp each card anchor with the year and kind Netflix fetched for it, as data attributes the isolated-world scanner (netflix.content.ts) reads. No extension API exists in this world, so the attributes are the whole interface, and nothing here touches the network or storage.
@@ -22,6 +22,14 @@ export default defineContentScript({
         const entity = readEntity(card)
         if (!entity) continue
         mark(card, entity)
+      }
+      // A modal (the hover preview, the detail view) names its title only as artwork too; its props carry the title.
+      for (const modal of document.querySelectorAll(MODAL_SELECTOR)) {
+        if (modal.hasAttribute(STAMP)) continue
+        const entity = readEntity(modal)
+        if (!entity) continue
+        mark(modal, entity)
+        if (entity.title) modal.setAttribute("data-rmo-title", entity.title)
       }
       // The billboard names its title only as artwork, so the stamp carries the title too.
       for (const section of document.querySelectorAll(BILLBOARD_SELECTOR)) {

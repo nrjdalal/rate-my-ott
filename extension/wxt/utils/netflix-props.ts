@@ -94,7 +94,7 @@ const linkedId = (card: Element): number | undefined => {
   return match ? Number(match[1]) : undefined
 }
 
-// Walk up from a card: a legacy videoModel for the card's own id is the whole answer; otherwise the first props with the card's videoId are the card's, the first section fragment with entity edges is the row's, and the edge whose entity has the card's videoId names the year and kind. Null when the element has no fiber or no card above it.
+// Walk up from a card (or a modal): a videoModel for the card's own id is the whole answer; otherwise the first props with the card's videoId are the card's, the first section fragment with entity edges is the row's, and the edge whose entity has the card's videoId names the year and kind. Null when the element has no fiber or no card above it.
 export function readEntity(card: Element, maxDepth = 40): Entity | null {
   const linked = linkedId(card)
   const owns = (id: number) => linked === undefined || id === linked
@@ -105,8 +105,14 @@ export function readEntity(card: Element, maxDepth = 40): Entity | null {
   for (let depth = 0; fiber && depth < maxDepth; depth += 1) {
     const props = fiber.memoizedProps
     if (isRecord(props)) {
-      if (isRecord(props.videoModel)) {
-        const legacy = fromVideoModel(props.videoModel)
+      // A legacy card holds its videoModel in its own props; the hover and detail modals hold theirs under previewModalState.
+      const model = isRecord(props.videoModel)
+        ? props.videoModel
+        : isRecord(props.previewModalState) && isRecord(props.previewModalState.videoModel)
+          ? props.previewModalState.videoModel
+          : undefined
+      if (model) {
+        const legacy = fromVideoModel(model)
         if (legacy && owns(legacy.videoId)) return legacy
       }
       if (isRecord(props.video)) {

@@ -2,7 +2,7 @@
 
 > IMDb ratings on every title while you browse Netflix, with more streaming platforms to come.
 
-A browser extension plus the small API behind it, built on [ZeroStarter](https://zerostarter.dev). The extension reads the titles Netflix renders, asks the Ratings API in batches, and paints an IMDb badge on every card, "• IMDb 8.5" in the billboard's metadata line, and an "IMDb:" row in the title modal's details. The API answers from its own IMDb index: IMDb's daily datasets, imported into Postgres every night, matched by name, kind, year, and runtime.
+A browser extension plus the small API behind it, built on [ZeroStarter](https://zerostarter.dev). The extension reads the titles Netflix renders, asks the Ratings API in batches, and paints an IMDb badge on every card, "• IMDb 8.5" in the billboard's metadata line, "IMDb 8.5" in the hover preview, and an "IMDb:" row in the title modal's details. The API answers from its own IMDb index: IMDb's daily datasets, imported into Postgres every night, matched by name, kind, year, and runtime.
 
 ## Monorepo structure
 
