@@ -80,7 +80,7 @@
     "defaults"
   ],
   "portless": {
-    "name": "zerostarter",
+    "name": "rate-my-ott",
     "script": "dev:app"
   }
 }
