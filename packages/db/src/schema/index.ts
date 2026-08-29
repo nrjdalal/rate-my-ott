@@ -1,1 +1,1 @@
-export * from "@/schema/ratings"
+export * from "@/schema/imdb"
