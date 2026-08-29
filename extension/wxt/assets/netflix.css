@@ -46,4 +46,10 @@
   color: #f5c518;
 }
 
+/* A title rated under the user's threshold (options page, off by default) keeps its badge and fades its artwork, so the eye skips it without anything being hidden or moved. */
+.rmo-dim img {
+  filter: brightness(0.45) saturate(0.6);
+  transition: filter 150ms;
+}
+
 /* The modal's rating is one more row of Netflix's own details column and borrows its classes (previewModal--tags, tag-item), so it needs no style of its own; .rmo-panel only marks the row as ours. */

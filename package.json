@@ -14,6 +14,8 @@
     "check-types:scripts": "tsc -p .github/scripts/tsconfig.json",
     "check-types:tests": "if [ -d tests ]; then find tests -name tsconfig.json -print0 | xargs -0 -n1 tsc -p; fi",
     "clean": "bash .github/scripts/clean.sh",
+    "crawl": "bash .github/scripts/netflix-crawl.sh",
+    "crawl:report": "bun .github/scripts/netflix-crawl-report.ts",
     "db:generate": "turbo run build --filter=@packages/env && bun --cwd packages/db drizzle-kit generate",
     "db:migrate": "turbo run build --filter=@packages/env && bun --cwd packages/db drizzle-kit migrate",
     "db:studio": "turbo run build --filter=@packages/env && bun --cwd packages/db drizzle-kit studio",

@@ -4,6 +4,8 @@ import {
   DOMINANT_MIN_VOTES,
   fitsQuery,
   addAka,
+  shortNames,
+  addShortNames,
   imdbType,
   keepAka,
   keepTitle,
@@ -15,12 +17,14 @@ import {
   parseRatingsLine,
   pickImdbTitle,
   readGzipLines,
+  resolveOutcome,
   resolveTitle,
   RUNTIME_MARGIN_MIN,
   searchKey,
   shouldPrune,
   staleNames,
   toImdbTitle,
+  toRating,
   VOTES_DOMINANCE,
   type ImdbBasics,
   type ImdbTitle,
@@ -110,6 +114,57 @@ describe("dataset lines", () => {
 })
 
 describe("alternate names", () => {
+  test("a well-known series also answers to its name before a subtitle's colon or spaced dash", () => {
+    const series = (over: Partial<ImdbBasics>) => basics({ titleType: "tvSeries", ...over })
+    expect(
+      shortNames(
+        series({
+          originalTitle: "Bleach: Sennen Kessen-hen",
+          primaryTitle: "Bleach: Thousand-Year Blood War",
+        }),
+      ),
+    ).toEqual(["bleach"])
+    expect(
+      shortNames(series({ originalTitle: "Tokyo Ghoul:re", primaryTitle: "Tokyo Ghoul:re" })),
+    ).toEqual(["tokyo ghoul"])
+    expect(
+      shortNames(
+        series({
+          originalTitle: "Dahmer - Monster: The Jeffrey Dahmer Story",
+          primaryTitle: "Dahmer - Monster: The Jeffrey Dahmer Story",
+        }),
+      ),
+    ).toEqual(["dahmer"])
+    // A subtitled film is another work ("Home: Something" must not answer to "Home"); a hyphen inside a word is not a separator; a name without one has no short name; a short name the title already answers to is nothing new.
+    expect(
+      shortNames(basics({ originalTitle: "Home: Something", primaryTitle: "Home: Something" })),
+    ).toEqual([])
+    expect(shortNames(series({ originalTitle: "Spider-Man", primaryTitle: "Spider-Man" }))).toEqual(
+      [],
+    )
+    expect(shortNames(series({ originalTitle: "Dune", primaryTitle: "Dune" }))).toEqual([])
+    expect(shortNames(series({ originalTitle: "Dune", primaryTitle: "Dune: Part One" }))).toEqual(
+      [],
+    )
+    const spellings = new Map([
+      ["tt1", { akas: ["tybw"], own: ["bleach thousand year blood war"] }],
+    ])
+    const tybw = series({
+      id: "tt1",
+      originalTitle: "Bleach: Thousand-Year Blood War",
+      primaryTitle: "Bleach: Thousand-Year Blood War",
+    })
+    expect(addShortNames(spellings, tybw)).toBe(1)
+    expect(addShortNames(spellings, tybw)).toBe(0)
+    expect(spellings.get("tt1")?.akas).toEqual(["tybw", "bleach"])
+    expect(
+      addShortNames(
+        spellings,
+        series({ id: "tt2", originalTitle: "Alpha: Beta", primaryTitle: "Alpha: Beta" }),
+      ),
+    ).toBe(0)
+  })
+
   test("parses an akas row and keeps the spellings a platform could show", () => {
     expect(parseAkasLine("tt1160419\t16\tDune\tIN\ten\timdbDisplay\t\\N\t0")).toEqual({
       attributes: null,
@@ -260,11 +315,20 @@ describe("keepTitle and names", () => {
 })
 
 describe("fitsQuery", () => {
-  test("a film fits within a year and five minutes; a same-name stranger does not", () => {
+  test("a film fits within a year and ten minutes; a same-name stranger does not", () => {
     // Netflix's "Alpha" (2026 there, 140 minutes) against the Hindi film (2025, 141) and the French one (2025, 128).
     expect(fitsQuery(title(), { runtime: 140, title: "Alpha", type: "movie", year: 2026 })).toBe(
       true,
     )
+    // Netflix's cut of "Bhooth Bangla" runs 163 minutes to IMDb's 173.
+    expect(
+      fitsQuery(title({ runtime: 173 }), {
+        runtime: 163,
+        title: "Alpha",
+        type: "movie",
+        year: 2026,
+      }),
+    ).toBe(true)
     expect(
       fitsQuery(title({ runtime: 128 }), {
         runtime: 140,
@@ -471,6 +535,53 @@ describe("pickImdbTitle", () => {
     expect(pickImdbTitle([old, known], { title: "Ikka", type: "series", year: 2021 }, at)).toBe(
       known,
     )
+  })
+
+  test("a namesake too new to have earned its votes does not deny dominance when a stated runtime fits the best at least as well", () => {
+    // Netflix's "Blast" (2026, 143 minutes) against IMDb's Blast (2026, 142, 17K votes) and a second 2026 listing of the name (144, 19 votes): the same year and length is a duplicate, not a rival.
+    const blast = title({ id: "tt32", runtime: 142, startYear: 2026, votes: 16971 })
+    const twin = title({ id: "tt33", runtime: 144, startYear: 2026, votes: 19 })
+    expect(
+      pickImdbTitle([twin, blast], { runtime: 143, title: "Blast", type: "movie", year: 2026 }, at),
+    ).toBe(blast)
+    // A twin a year off with a length a minute off is no duplicate: the new film sits on the stated year, and the popular one is not taken.
+    const last = title({ id: "tt34", runtime: 121, startYear: 2025, votes: 5000 })
+    const fresh = title({ id: "tt35", runtime: 122, startYear: 2026, votes: 20 })
+    expect(
+      pickImdbTitle([last, fresh], { runtime: 120, title: "X", type: "movie", year: 2026 }, at),
+    ).toBeNull()
+    // Without a runtime to check, or with one the twin fits better, the twin is as likely the platform's.
+    expect(
+      pickImdbTitle([twin, blast], { title: "Blast", type: "movie", year: 2026 }, at),
+    ).toBeNull()
+    expect(
+      pickImdbTitle([twin, blast], { runtime: 145, title: "Blast", type: "movie", year: 2026 }, at),
+    ).toBeNull()
+  })
+
+  test("a namesake too new to have earned its votes denies dominance only from as close to the stated year as the best", () => {
+    // Netflix's "Desire" (2026, no runtime on the card) against a 2025 film of the name with 12 votes: the year Netflix states is the popular film's exactly, the small one is the tolerance at work.
+    const desire = title({ id: "tt27", runtime: 97, startYear: 2026, votes: 3080 })
+    const moham = title({ id: "tt28", runtime: 111, startYear: 2025, votes: 12 })
+    expect(pickImdbTitle([moham, desire], { title: "Desire", type: "movie", year: 2026 }, at)).toBe(
+      desire,
+    )
+    // The other way round, the new film sits on the stated year and the popular one a year off: as likely Netflix's, so no guess.
+    const fresh = title({ id: "tt29", runtime: null, startYear: 2026, votes: 40 })
+    const famous = title({ id: "tt30", runtime: null, startYear: 2025, votes: 5000 })
+    expect(
+      pickImdbTitle([famous, fresh], { title: "Beta", type: "movie", year: 2026 }, at),
+    ).toBeNull()
+    // The year gap counts only for a well-known best: 500 votes on the stated year against a dozen a year off is still no guess.
+    const modest = title({ id: "tt36", runtime: 97, startYear: 2026, votes: 500 })
+    expect(
+      pickImdbTitle([moham, modest], { title: "Desire", type: "movie", year: 2026 }, at),
+    ).toBeNull()
+    // Both on the stated year: no guess either.
+    const twin = title({ id: "tt31", runtime: null, startYear: 2026, votes: 5000 })
+    expect(
+      pickImdbTitle([twin, fresh], { title: "Beta", type: "movie", year: 2026 }, at),
+    ).toBeNull()
   })
 
   test("a candidate the statements cannot verify drops out, but vetoes a far less popular pick", () => {
@@ -686,7 +797,92 @@ describe("resolveTitle", () => {
   ])
   const lookup = (spelling: string) => index.get(spelling) ?? []
 
-  test("a parenthetical qualifier is dropped freely; a subtitle only for the stated year exactly", () => {
+  test("a spin-off the index knows but misdates stays a miss, never its parent; the subtitle alone must be a work of its own", () => {
+    // Netflix's "Love Is Blind: Brazil" (2025) is on IMDb with a stale end year; the US show is well known and running, and must not lend its score.
+    const us = title({
+      endYear: null,
+      id: "tt11470236",
+      runtime: 60,
+      startYear: 2020,
+      titleType: "tvSeries",
+      votes: 20000,
+    })
+    const brazil = title({
+      endYear: 2023,
+      id: "tt15520130",
+      runtime: 60,
+      startYear: 2021,
+      titleType: "tvSeries",
+      votes: 1200,
+    })
+    const stale = (spelling: string) =>
+      spelling === "Love Is Blind" ? [us] : spelling === "Love Is Blind: Brazil" ? [brazil] : []
+    expect(
+      resolveOutcome({ title: "Love Is Blind: Brazil", type: "series", year: 2025 }, stale, NOW),
+    ).toEqual({ reason: "unmatched", title: null })
+    // "Something: Elite" (2022) is not Élite (2018-2024) just because the subtitle alone names a running show; the work has to have started around the stated year.
+    const elite = title({
+      endYear: 2024,
+      id: "tt7134908",
+      runtime: 50,
+      startYear: 2018,
+      titleType: "tvSeries",
+      votes: 90000,
+    })
+    const own = title({
+      endYear: 2022,
+      id: "tt13649396",
+      runtime: 45,
+      startYear: 2022,
+      titleType: "tvSeries",
+      votes: 20000,
+    })
+    const bySubtitle = (spelling: string) =>
+      spelling === "Elite"
+        ? [elite]
+        : spelling === "The Bastard Son & The Devil Himself"
+          ? [own]
+          : []
+    expect(
+      resolveOutcome({ title: "Something: Elite", type: "series", year: 2022 }, bySubtitle, NOW),
+    ).toEqual({ reason: "unknown", title: null })
+    expect(
+      resolveOutcome(
+        { title: "Half Bad: The Bastard Son & The Devil Himself", type: "series", year: 2022 },
+        bySubtitle,
+        NOW,
+      ),
+    ).toEqual({ reason: null, title: own })
+    // An article variant is tried after the name as written, a film's year exact: "Devil's Advocate" has namesakes of its own that misfit and is "The Devil's Advocate" (1997); "The Kingdom" (2026) is not last year's "Kingdom".
+    const advocate = title({ id: "tt0118971", runtime: 144, startYear: 1997, votes: 451098 })
+    const namesake = title({
+      endYear: 2023,
+      id: "tt28210839",
+      runtime: 42,
+      startYear: 2023,
+      titleType: "tvSeries",
+      votes: 486,
+    })
+    const byArticle = (s: string) =>
+      s === "The Devil's Advocate" ? [advocate] : s === "Devil's Advocate" ? [namesake] : []
+    expect(
+      resolveOutcome(
+        { runtime: 144, title: "Devil's Advocate", type: "movie", year: 1997 },
+        byArticle,
+        NOW,
+      ).title,
+    ).toBe(advocate)
+    const lastYear = title({ id: "tt9000003", runtime: 100, startYear: 2025, votes: 5000 })
+    expect(
+      resolveOutcome(
+        { title: "The Kingdom", type: "movie", year: 2026 },
+        (s) => (s === "Kingdom" ? [lastYear] : []),
+        NOW,
+      ),
+    ).toEqual({ reason: "unmatched", title: null })
+  })
+
+  test("a parenthetical qualifier is dropped freely; a subtitle drops to the parent for a season, never for a film", () => {
     expect(
       resolveTitle({ title: "The Office (U.S.)", type: "series", year: 2012 }, lookup, NOW)?.id,
     ).toBe("tt0386676")
@@ -694,10 +890,6 @@ describe("resolveTitle", () => {
       resolveTitle({ title: "Squid Game: The Challenge", type: "series", year: 2023 }, lookup, NOW)
         ?.id,
     ).toBe("tt24003330")
-    // Unknown under its own name, the spin-off must not inherit the parent's score by dropping its subtitle.
-    expect(
-      resolveTitle({ title: "Squid Game: The Recruit", type: "series", year: 2025 }, lookup, NOW),
-    ).toBeNull()
     expect(
       resolveTitle(
         { title: "Operation Safed Sagar: The Untold Story", type: "series", year: 2026 },
@@ -705,6 +897,65 @@ describe("resolveTitle", () => {
         NOW,
       )?.id,
     ).toBe("tt36643714")
+    // A subtitled series unknown under its own name is a season of the parent: IMDb's "Monster" (2022-) is Netflix's "Monster: The Ed Gein Story" (2025).
+    const anthology = title({
+      endYear: null,
+      id: "tt13207736",
+      runtime: null,
+      startYear: 2022,
+      titleType: "tvSeries",
+      votes: 225875,
+    })
+    const anime = title({
+      endYear: 2005,
+      id: "tt0434706",
+      runtime: null,
+      startYear: 2004,
+      titleType: "tvSeries",
+      votes: 90000,
+    })
+    const monsters = (spelling: string) => (spelling === "Monster" ? [anime, anthology] : [])
+    expect(
+      resolveTitle(
+        { title: "Monster: The Ed Gein Story", type: "series", year: 2025 },
+        monsters,
+        NOW,
+      )?.id,
+    ).toBe("tt13207736")
+    expect(
+      resolveTitle(
+        { title: "Monster: The Jeffrey Dahmer Story", type: "series", year: 2022 },
+        monsters,
+        NOW,
+      )?.id,
+    ).toBe("tt13207736")
+    expect(
+      resolveTitle({ title: "Monster: Something", type: "series", year: 2010 }, monsters, NOW),
+    ).toBeNull()
+    // A subtitled series whose parent is obscure gets nothing; a subtitled film never drops to a namesake of another year.
+    const small = title({
+      endYear: null,
+      id: "tt9",
+      runtime: null,
+      startYear: 2022,
+      titleType: "tvSeries",
+      votes: 300,
+    })
+    expect(
+      resolveTitle(
+        { title: "Small: Season Two", type: "series", year: 2024 },
+        (s) => (s === "Small" ? [small] : []),
+        NOW,
+      ),
+    ).toBeNull()
+    const dune = title({ id: "tt1160419", runtime: 155, startYear: 2021, votes: 1086538 })
+    expect(
+      resolveTitle(
+        { title: "Dune: Part Two", type: "movie", year: 2024 },
+        (s) => (s === "Dune" ? [dune] : []),
+        NOW,
+      ),
+    ).toBeNull()
   })
 
   test("an ambiguity under the platform's own spelling is final; a looser spelling is not tried", () => {
@@ -750,6 +1001,161 @@ describe("resolveTitle", () => {
         NOW,
       ),
     ).toBeNull()
+  })
+})
+
+describe("resolveOutcome and toRating", () => {
+  const alpha = title({ id: "tt28363783", runtime: 141, startYear: 2025, votes: 24000 })
+  const wolf = title({ id: "tt6194322", runtime: 96, startYear: 2018, votes: 90000 })
+  const parent = title({
+    endYear: null,
+    id: "tt10919420",
+    runtime: 55,
+    startYear: 2021,
+    titleType: "tvSeries",
+    votes: 774354,
+  })
+  const index = new Map<string, ImdbTitle[]>([
+    ["Alpha", [alpha, wolf]],
+    ["Brand New Film", [title({ id: "tt31000001", rating: null, startYear: 2026, votes: null })]],
+    ["Dune", [title({ id: "tt1160419", runtime: 155, startYear: 2021, votes: 1086538 })]],
+  ])
+  const lookup = (spelling: string) => index.get(spelling) ?? []
+
+  test("without a year, takes nothing, and says whether the index knows the name at all", () => {
+    // "Dune" is one film in this index and still not taken: Netflix's Mexican "Lovesick" (2026) is not the British series, however alone that one stands.
+    expect(resolveOutcome({ title: "Dune", type: "movie" }, lookup, NOW)).toEqual({
+      reason: "unstated",
+      title: null,
+    })
+    expect(resolveOutcome({ title: "Alpha" }, lookup, NOW)).toEqual({
+      reason: "unstated",
+      title: null,
+    })
+    expect(resolveOutcome({ title: "Nothing Here" }, lookup, NOW)).toEqual({
+      reason: "unknown",
+      title: null,
+    })
+    // A loose spelling never counts without a year: "Dune: Part Two" is not Dune.
+    expect(resolveOutcome({ title: "Dune: Part Two", type: "movie" }, lookup, NOW)).toEqual({
+      reason: "unknown",
+      title: null,
+    })
+  })
+
+  test("says why a query got no title, and unknown when only a loose spelling had candidates", () => {
+    expect(resolveOutcome({ title: "Alpha", type: "movie" }, lookup, NOW)).toEqual({
+      reason: "unstated",
+      title: null,
+    })
+    expect(
+      resolveOutcome({ title: "Nothing Here", type: "movie", year: 2026 }, lookup, NOW),
+    ).toEqual({ reason: "unknown", title: null })
+    expect(resolveOutcome({ title: "Alpha", type: "series", year: 2026 }, lookup, NOW)).toEqual({
+      reason: "unmatched",
+      title: null,
+    })
+    expect(
+      resolveOutcome({ runtime: 60, title: "Alpha", type: "movie", year: 2025 }, lookup, NOW),
+    ).toEqual({ reason: "unmatched", title: null })
+    expect(resolveOutcome({ title: "Alpha", type: "movie", year: 2018 }, lookup, NOW)).toEqual({
+      reason: null,
+      title: wolf,
+    })
+    // A subtitled film refused under the loose spelling has no namesake: the name is unknown, not unmatched.
+    expect(
+      resolveOutcome({ title: "Dune: Part Two", type: "movie", year: 2024 }, lookup, NOW),
+    ).toEqual({ reason: "unknown", title: null })
+  })
+
+  test("every ambiguity reads as ambiguous", () => {
+    const at = NOW
+    const twin = title({ id: "tt2", runtime: null, startYear: 2025, votes: 20000 })
+    const undecided = (spelling: string) => (spelling === "Alpha" ? [alpha, twin] : [])
+    expect(
+      resolveOutcome({ title: "Alpha", type: "movie", year: 2025 }, undecided, at).reason,
+    ).toBe("ambiguous")
+    const unrated = title({ id: "tt3", runtime: null, startYear: 2025, votes: null })
+    expect(
+      resolveOutcome(
+        { title: "Alpha", type: "movie", year: 2025 },
+        (s) => (s === "Alpha" ? [alpha, unrated] : []),
+        at,
+      ).reason,
+    ).toBe("ambiguous")
+    const famous = title({ id: "tt4", runtime: null, startYear: 2025, votes: 500000 })
+    const measured = title({ id: "tt5", runtime: 138, startYear: 2024, votes: 20 })
+    expect(
+      resolveOutcome(
+        { runtime: 140, title: "Alpha", type: "movie", year: 2025 },
+        (s) => (s === "Alpha" ? [famous, measured] : []),
+        at,
+      ).reason,
+    ).toBe("ambiguous")
+    const akaOne = title({ aka: true, id: "tt6", runtime: null, startYear: 2025, votes: 100 })
+    const akaTwo = title({ aka: true, id: "tt7", runtime: null, startYear: 2025, votes: 100000 })
+    expect(
+      resolveOutcome(
+        { title: "Alpha", type: "movie", year: 2025 },
+        (s) => (s === "Alpha" ? [akaOne, akaTwo] : []),
+        at,
+      ).reason,
+    ).toBe("ambiguous")
+    const show = title({
+      id: "tt8",
+      runtime: null,
+      startYear: 2025,
+      titleType: "tvSeries",
+      votes: 100,
+    })
+    expect(
+      resolveOutcome(
+        { title: "Alpha", year: 2025 },
+        (s) => (s === "Alpha" ? [alpha, show] : []),
+        at,
+      ).reason,
+    ).toBe("ambiguous")
+    expect(
+      resolveOutcome(
+        { title: "Squid Game: The Recruit", type: "series", year: 2025 },
+        (s) => (s === "Squid Game" ? [parent] : []),
+        at,
+      ),
+    ).toEqual({ reason: null, title: parent })
+  })
+
+  test("toRating carries the index's answer, or the miss with its reason and what was asked", () => {
+    expect(
+      toRating({ title: "Alpha", type: "movie", year: 2018 }, { reason: null, title: wolf }),
+    ).toEqual({
+      found: true,
+      imdbId: "tt6194322",
+      imdbRating: 6.1,
+      imdbVotes: 90000,
+      reason: null,
+      title: "Alpha",
+      type: "movie",
+      year: 2018,
+    })
+    const fresh = title({ id: "tt31000001", rating: null, startYear: 2026, votes: null })
+    expect(
+      toRating({ title: "Brand New Film", year: 2026 }, { reason: null, title: fresh }),
+    ).toMatchObject({ found: true, imdbRating: null, reason: "unrated" })
+    expect(
+      toRating(
+        { title: "  Nothing Here ", type: "series", year: 2026 },
+        { reason: "unknown", title: null },
+      ),
+    ).toEqual({
+      found: false,
+      imdbId: null,
+      imdbRating: null,
+      imdbVotes: null,
+      reason: "unknown",
+      title: "Nothing Here",
+      type: "series",
+      year: 2026,
+    })
   })
 })
 

@@ -10,15 +10,20 @@ import {
   hasBillboardRating,
   STAMP,
   hasPanel,
+  learn,
+  metaOf,
   readBillboard,
   readCard,
-  readModal,
+  readModals,
+  recall,
   removeAll,
   renderBadge,
   renderBillboardRating,
   renderPanel,
+  type Meta,
 } from "@/utils/netflix"
-import { DEFAULT_SETTINGS, settings, type Settings } from "@/utils/settings"
+import { buildReport, type PaintItem } from "@/utils/report"
+import { readSettings, settings, withDefaults, type Settings } from "@/utils/settings"
 
 // How long to collect newly seen titles before asking for them in one batch, and how often to rescan regardless of mutations (Netflix swaps artwork and virtualizes rows without always mutating what the observer watches).
 const FLUSH_MS = 250
@@ -35,8 +40,12 @@ export default defineContentScript({
   matches: ["*://*.netflix.com/*"],
   runAt: "document_idle",
   async main(ctx) {
-    let current: Settings = await settings.getValue()
+    let current: Settings = await readSettings()
     const answers = new Map<string, Rating | null>()
+    // What the last paint saw on screen, for the popup's "why no score" list; asked for, never pushed, so the list is this tab's and current.
+    let lastPaint: PaintItem[] = []
+    // What any surface has stated about a video id, for the surfaces that state less: a genre page's legacy card names no runtime, the same film's home-row card or hovered preview does.
+    const known = new Map<string, Meta>()
     const failedAt = new Map<string, number>()
     const inflight = new Set<string>()
     const pending = new Map<string, TitleQuery>()
@@ -57,43 +66,49 @@ export default defineContentScript({
     }
 
     const paint = () => {
-      if (!current.enabled) return
+      const items: PaintItem[] = []
+      if (!current.enabled) {
+        lastPaint = []
+        return
+      }
       if (current.badges) {
         for (const card of findCards(document)) {
           const info = readCard(card)
           if (!info) continue
-          // A card whose stamp no longer names it is being recycled for another title: its badge goes until the new stamp lands. A card is asked about only once the page has named its year: the API answers nothing without one, so a card the MAIN-world script never stamps (Netflix moved its internals) simply stays bare.
-          if (info.pending || !info.year) {
-            if (info.pending) renderBadge(card, null)
+          // A card whose stamp no longer names it is being recycled for another title: its badge goes until the new stamp lands. A card is asked about once the page has named it, with whatever it stated: without a year (a search result) the API takes nothing, but says whether it knows the name. A card the MAIN-world script never stamps (Netflix moved its internals) simply stays bare.
+          if (info.pending) {
+            renderBadge(card, null)
             continue
           }
-          const query: TitleQuery = {
-            title: info.title,
-            ...(info.runtime ? { runtime: info.runtime } : {}),
-            ...(info.type ? { type: info.type } : {}),
-            year: info.year,
-          }
+          learn(known, info.id, info)
+          const query: TitleQuery = { title: info.title, ...recall(known, info.id, info) }
           const rating = ask(query)
           const key = keyOf(query)
-          if (rating !== undefined && !hasBadge(card, key)) renderBadge(card, rating, key)
+          items.push({ key, query })
+          if (rating !== undefined && !hasBadge(card, key)) {
+            renderBadge(card, rating, key, current.dimBelow)
+          }
         }
       }
       const billboard = readBillboard(document)
-      if (billboard && billboard.query.year) {
+      if (billboard) {
         const rating = ask(billboard.query)
         const key = keyOf(billboard.query)
+        items.push({ key, query: billboard.query })
         if (rating !== undefined && !hasBillboardRating(billboard.anchor, key)) {
           renderBillboardRating(billboard.anchor, rating, key)
         }
       }
-      const modal = readModal(document)
-      if (modal && modal.query.year) {
+      for (const modal of readModals(document)) {
+        if (modal.id) learn(known, modal.id, metaOf(modal.query))
         const rating = ask(modal.query)
         const key = keyOf(modal.query)
+        items.push({ key, query: modal.query })
         if (rating !== undefined && !hasPanel(modal.anchor, key)) {
           renderPanel(modal.anchor, rating, key)
         }
       }
+      lastPaint = items
     }
 
     const flush = async () => {
@@ -136,10 +151,17 @@ export default defineContentScript({
 
     // A settings change repaints from what is already known, and disabling clears the page.
     settings.watch((next) => {
-      current = next ?? DEFAULT_SETTINGS
+      current = withDefaults(next)
       failedAt.clear()
       removeAll(document)
       paint()
+    })
+
+    // The popup asks this tab for its report; the answer is built from the last paint and the answers so far, so it is this tab's and current, and survives a background restart.
+    browser.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {
+      if (message.type !== "page:latest") return false
+      sendResponse(buildReport(lastPaint, answers))
+      return false
     })
 
     const observer = new MutationObserver(scheduleScan)

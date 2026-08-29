@@ -68,11 +68,35 @@ export function readCard(card: Element): CardInfo | null {
 }
 
 // The year, kind, and length the MAIN-world script stamped on a card, when it found them.
-export function stampedMeta(card: Element): {
-  runtime?: number
-  type?: "movie" | "series"
-  year?: number
-} {
+export type Meta = { runtime?: number; type?: "movie" | "series"; year?: number }
+
+// What a tab has learned about a Netflix video id from any surface that stated it: a home-row card states a film's runtime, a hovered preview its length as "2h 17m", while a genre page's legacy card states neither, and the same title is one id everywhere. Learning only fills what is missing, and recalling lets the surface's own statements win, so a stale or recycled stamp never overrides what a card says for itself.
+export const learn = (known: Map<string, Meta>, id: string, meta: Meta): void => {
+  const had = known.get(id) ?? {}
+  const merged: Meta = {
+    ...((had.runtime ?? meta.runtime) ? { runtime: had.runtime ?? meta.runtime } : {}),
+    ...((had.type ?? meta.type) ? { type: had.type ?? meta.type } : {}),
+    ...((had.year ?? meta.year) ? { year: had.year ?? meta.year } : {}),
+  }
+  if (Object.keys(merged).length > 0) known.set(id, merged)
+}
+
+// What a query states, as meta to learn: the runtime, kind, and year, when they are numbers and kinds.
+export const metaOf = (query: TitleQuery): Meta => ({
+  ...(typeof query.runtime === "number" && query.runtime > 0 ? { runtime: query.runtime } : {}),
+  ...(query.type === "movie" || query.type === "series" ? { type: query.type } : {}),
+  ...(typeof query.year === "number" && query.year > 0 ? { year: query.year } : {}),
+})
+
+export const recall = (known: Map<string, Meta>, id: string, own: Meta): Meta => {
+  const had = known.get(id) ?? {}
+  const runtime = own.runtime ?? had.runtime
+  const type = own.type ?? had.type
+  const year = own.year ?? had.year
+  return { ...(runtime ? { runtime } : {}), ...(type ? { type } : {}), ...(year ? { year } : {}) }
+}
+
+export function stampedMeta(card: Element): Meta {
   const runtime = Number(card.getAttribute("data-rmo-runtime")) || undefined
   const year = Number(card.getAttribute("data-rmo-year")) || undefined
   const kind = card.getAttribute("data-rmo-type")
@@ -124,10 +148,22 @@ function scores(doc: Document, rating: Rating): HTMLElement[] {
   return out
 }
 
-// Idempotent: the card ends with exactly one badge (or none), whatever it had before.
-export function renderBadge(card: Element, rating: Rating | null, key = ""): void {
+// Whether a title's artwork is dimmed: only a title with a score under the threshold, never one without a score.
+export const shouldDim = (rating: Rating | null, dimBelow: number | null): boolean =>
+  dimBelow !== null && rating !== null && rating.imdbRating !== null && rating.imdbRating < dimBelow
+
+const DIM = "rmo-dim"
+
+// Idempotent: the card ends with exactly one badge (or none), whatever it had before, and its artwork dimmed only when the score and the threshold say so.
+export function renderBadge(
+  card: Element,
+  rating: Rating | null,
+  key = "",
+  dimBelow: number | null = null,
+): void {
   const host = badgeHost(card)
   host.querySelector(`:scope > .${BADGE}`)?.remove()
+  host.classList.toggle(DIM, shouldDim(rating, dimBelow))
   if (!rating || !rating.found) return
   const parts = scores(host.ownerDocument, rating)
   if (parts.length === 0) return
@@ -141,7 +177,13 @@ export function renderBadge(card: Element, rating: Rating | null, key = ""): voi
 }
 
 // Where a modal's rating goes: the detail modal's details column as an "IMDb:" row, the hover modal's metadata line as an item beside the duration.
-export type ModalInfo = { anchor: HTMLElement; kind: "details" | "line"; query: TitleQuery }
+export type ModalInfo = {
+  anchor: HTMLElement
+  // The Netflix video id the modal's stamp names, when it does, so what the modal states (a length from "2h 17m") can be learned for the title's cards.
+  id?: string
+  kind: "details" | "line"
+  query: TitleQuery
+}
 
 // The title the open modal is about. Netflix renders titles as artwork, so it is read from where the page still spells it out: the ?jbv=<id> the modal puts in the URL names the card it opened from, whose aria-label is the title; failing that, the modal's own boxart or story art carries it as alt text, and the legacy logo image did too.
 // The card the open modal came from: the ?jbv=<id> in the URL names it.
@@ -168,10 +210,20 @@ function modalTitle(root: ParentNode, modal: HTMLElement): string | undefined {
 }
 
 // The open title modal, if any, with its title and the year and kind its stamp or metadata row states, which is what lets the lookup disambiguate a remake. The anchor is the details column (the detail modal) or the metadata line (the hover preview, which has no details) the rating joins.
-export function readModal(root: ParentNode): ModalInfo | null {
-  const modal = root.querySelector<HTMLElement>(MODAL_SELECTOR)
-  if (!modal) return null
-  const title = modalTitle(root, modal)
+// Every modal open at once: the detail modal, the hover preview, and on a legacy page the preview that lingers while the next one animates in beside it, since the one the viewer is looking at is not always the first in the document.
+export const readModals = (root: ParentNode): ModalInfo[] =>
+  [...root.querySelectorAll<HTMLElement>(MODAL_SELECTOR)].flatMap((modal) => {
+    const info = readOneModal(root, modal)
+    return info ? [info] : []
+  })
+
+export const readModal = (root: ParentNode): ModalInfo | null => readModals(root)[0] ?? null
+
+function readOneModal(root: ParentNode, modal: HTMLElement): ModalInfo | null {
+  const id = modal.getAttribute("data-rmo-id")
+  const twin = id ? root.querySelector(`[data-rmo-id="${id}"]:not(${MODAL_SELECTOR})`) : null
+  // A legacy preview's stamp may carry no title (its card was recycled by the time it was stamped); the card it hovers over, found by the id, still spells it.
+  const title = modalTitle(root, modal) || (twin ? readCard(twin)?.title : undefined)
   if (!title) return null
   const details = modal.querySelector<HTMLElement>(".previewModal--detailsMetadata-right")
   const line = modal.querySelector<HTMLElement>(".videoMetadata--line")
@@ -179,6 +231,11 @@ export function readModal(root: ParentNode): ModalInfo | null {
   if (!anchor) return null
   const parsedYear = Number(text(modal.querySelector(".year"))?.match(/\d{4}/)?.[0]) || undefined
   const duration = text(modal.querySelector(".duration")) ?? ""
+  // "1h 39m" is the film's length, the strongest thing to check a namesake against, where the props stated none.
+  const length = duration.match(/^\s*(?:(\d+)\s*h)?\s*(?:(\d+)\s*m)?\s*$/i)
+  const parsedRuntime = length
+    ? Number(length[1] ?? 0) * 60 + Number(length[2] ?? 0) || undefined
+    : undefined
   // "6 Episodes", "3 Seasons", or "Limited Series" for a show; "2h 33m" for a film.
   const parsedType = /season|episode|series/i.test(duration)
     ? ("series" as const)
@@ -187,15 +244,14 @@ export function readModal(root: ParentNode): ModalInfo | null {
       : undefined
   // The modal's own stamp names the page's year and kind when its props carry them (the hover preview's do not, only its id and title); the card it opened from or hovers over, found by the jbv in the URL or by the same stamped id, is the next source, and the modal's metadata text the last.
   const own = stampedMeta(modal)
-  const id = modal.getAttribute("data-rmo-id")
-  const twin = id ? root.querySelector(`[data-rmo-id="${id}"]:not(${MODAL_SELECTOR})`) : null
   const fromCard = stampedMeta(modalCard(root) ?? twin ?? modal)
   const stamped = { ...fromCard, ...own }
   const year = stamped.year ?? parsedYear
   const type = stamped.type ?? parsedType
-  const runtime = stamped.runtime
+  const runtime = stamped.runtime ?? (type === "movie" ? parsedRuntime : undefined)
   return {
     anchor,
+    ...(id ? { id } : {}),
     kind: details ? "details" : "line",
     query: {
       title,
@@ -303,4 +359,5 @@ export function renderBillboardRating(anchor: HTMLElement, rating: Rating | null
 
 export function removeAll(root: ParentNode): void {
   for (const node of root.querySelectorAll(`.${BADGE}, .${PANEL}`)) node.remove()
+  for (const node of root.querySelectorAll(`.${DIM}`)) node.classList.remove(DIM)
 }

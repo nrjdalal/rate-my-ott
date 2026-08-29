@@ -24,7 +24,11 @@ Firefox keeps a temporary add-on until it closes; a signed build that stays inst
 
 ## What you will see
 
-Every title card gets a small yellow IMDb score in its top-right corner. The preview that opens when you hover a card shows "IMDb 5.4" beside its duration; the hero at the top of a page shows "• IMDb 8.5" in its metadata line; opening a title adds an "IMDb:" row with the score and vote count beside the cast and genres, linking to the IMDb page, and its "More Like This" cards get a badge too. A title with no score is either too new to have one, not on IMDb under that name, or a name several titles share that the extension refuses to guess between: a wrong score is worse than none. Search results stay bare, since Netflix states no year for them.
+Every title card gets a small yellow IMDb score in its top-right corner. The preview that opens when you hover a card shows "IMDb 5.4" beside its duration; the hero at the top of a page shows "• IMDb 8.5" in its metadata line; opening a title adds an "IMDb:" row with the score and vote count beside the cast and genres, linking to the IMDb page, and its "More Like This" cards get a badge too. A title with no score is either too new to have one, not on IMDb under that name, or a name several titles share that the extension refuses to guess between: a wrong score is worse than none. A genre page states no length for its films, so a film whose name has namesakes may stay bare there until you hover or open it: the preview and the title page state the length, and the tab remembers it for the card. Search results stay bare, since Netflix states no year for them and a name alone is no proof (its 2026 Mexican "Lovesick" is not the British series).
+
+## Options
+
+The popup switches the whole extension, or just the card badges, off and on. The options page (from the popup) has one more setting: **Dim low-rated titles** fades the artwork of any title rated below a threshold you pick (off by default), so the eye skips it without anything being hidden or moved; a title without a score is never dimmed, and the badge stays either way.
 
 ## Updating
 
@@ -32,4 +36,4 @@ A new release is a new zip: unzip it over the old folder (or into a new one and 
 
 ## If nothing shows
 
-Click the extension's icon. The popup says whether the API is reachable and how fresh the IMDb index is ("IMDb index: 619.2K titles, refreshed 2 hours ago"); "not built yet" or "API unreachable" names the cause. Both switches on, a reload of the Netflix tab, and a quit-and-reopen of the browser (which clears the extension's session memory) cover everything else. The extension sends only the title names Netflix shows, and nothing about you; see [Privacy](/docs/privacy).
+Click the extension's icon. The popup says whether the API is reachable and how fresh the IMDb index is ("IMDb index: 619.2K titles, refreshed 2 hours ago"); "not built yet" or "API unreachable" names the cause. It also lists what the current Netflix tab asked about: how many titles got a score, and the ones that did not, grouped by why (not rated yet on IMDb, several IMDb titles share the name, not on IMDb under that name, namesakes of other years, no year stated). Both switches on, a reload of the Netflix tab, and a quit-and-reopen of the browser (which clears the extension's session memory) cover everything else. The extension sends only the title names Netflix shows, and nothing about you; see [Privacy](/docs/privacy).

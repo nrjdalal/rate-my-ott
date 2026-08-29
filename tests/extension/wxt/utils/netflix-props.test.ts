@@ -59,6 +59,45 @@ describe("readEntity", () => {
     expect(readEntity(cardWithFibers(null))).toEqual({ title: "Alpha", videoId: 82023350 })
   })
 
+  // A Continue Watching card links to /watch/, its own props never name its id, and its row carries the video records themselves as the edges' nodes.
+  test("a Continue Watching card is the card its link names, with its label as its title and the row's record as its entity", () => {
+    const window = new Window({ url: "https://www.netflix.com/browse" })
+    window.document.body.innerHTML = `<a href="/watch/81715790?trackId=14170287" aria-label="Bhooth Bangla" data-uia="progress-card"><div><img alt=""></div></a>`
+    const anchor = window.document.querySelector("a") as unknown as Element
+    const row = {
+      memoizedProps: {
+        sectionFragment: {
+          entities: {
+            edges: [
+              { node: { __typename: "Show", releaseYear: 2024, videoId: 2 } },
+              {
+                node: {
+                  __typename: "Movie",
+                  releaseYear: 2026,
+                  runtimeSec: 10380,
+                  videoId: 81715790,
+                },
+              },
+            ],
+          },
+        },
+      },
+      return: null,
+    }
+    const card = { memoizedProps: { progress: 0.4 }, return: { memoizedProps: {}, return: row } }
+    ;(anchor as unknown as Record<string, unknown>)["__reactFiber$abc123"] = {
+      memoizedProps: { "data-uia": "progress-card" },
+      return: card,
+    }
+    expect(readEntity(anchor)).toEqual({
+      runtime: 173,
+      title: "Bhooth Bangla",
+      type: "movie",
+      videoId: 81715790,
+      year: 2026,
+    })
+  })
+
   // The legacy card (.title-card on genre pages) carries one videoModel; a show states its latest season's year and no length, a film its length in seconds.
   test("a legacy card reads its videoModel: the id, title, year, and kind, and a film's length", () => {
     const legacy = (model: Record<string, unknown>) => {
@@ -194,6 +233,29 @@ describe("readEntity", () => {
       ),
     ).toBeNull()
     expect(readEntity(modalCard("No id", { title: "No id" }))).toBeNull()
+  })
+
+  test("a hover preview that names only its id is stamped with it, and with the hovered card's title", () => {
+    const window = new Window({ url: "https://www.netflix.com/browse/genre/83" })
+    window.document.body.innerHTML = `<div class="title-card" data-rmo-meta data-rmo-id="82048302" data-rmo-title="MOURINHO" data-rmo-year="2026" data-rmo-type="series"></div><div class="previewModal--container mini-modal"><a href="/title/82048302?dpRightClick=1">MOURINHO</a><a href="/watch/82048399?trackId=1">Play</a></div>`
+    const modal = window.document.querySelector(".previewModal--container") as unknown as Element
+    const state = {
+      modalState: "MINI_MODAL",
+      unifiedEntityId: "Video:82048302",
+      videoId: 82048302,
+      videoModel: undefined,
+    }
+    ;(modal as unknown as Record<string, unknown>)["__reactFiber$abc123"] = {
+      memoizedProps: { className: "previewModal--container" },
+      return: { memoizedProps: { previewModalState: state }, return: null },
+    }
+    expect(readEntity(modal)).toEqual({ title: "MOURINHO", videoId: 82048302 })
+    // The card gone (scrolled out and recycled), the id alone is still the stamp.
+    window.document.querySelector(".title-card")?.remove()
+    expect(readEntity(modal)).toEqual({ title: "", videoId: 82048302 })
+    // A preview whose links name another title (a stale one mid-transition) is not stamped with this id.
+    ;(modal.querySelector("a") as Element).setAttribute("href", "/title/70000001")
+    expect(readEntity(modal)).toBeNull()
   })
 
   test("the billboard reads its play button's entity and drops the promoted season from the title", () => {
