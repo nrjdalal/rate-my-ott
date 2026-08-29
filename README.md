@@ -19,7 +19,11 @@ A browser extension plus the small API behind it, built on [ZeroStarter](https:/
 
 Types flow from the API to both clients: the extension and the web app call it through `hc<AppType>`, so a change to the ratings route retypes every caller.
 
-## Quick start
+## Use it
+
+Download [rate-my-ott-chrome.zip](https://github.com/nrjdalal/rate-my-ott/releases/latest/download/rate-my-ott-chrome.zip) (or [the Firefox zip](https://github.com/nrjdalal/rate-my-ott/releases/latest/download/rate-my-ott-firefox.zip)), unzip it, load the folder from `chrome://extensions` with Developer mode on, and open Netflix. Nothing to run, nothing to configure: the build talks to the hosted API. The [install guide](web/next/content/docs/getting-started/install.mdx) has the Firefox steps and what to check if nothing shows.
+
+## Develop
 
 ```bash
 # install, migrate (POSTGRES_URL is set by `zerostarter init`, or set it yourself), build the IMDb index, run
@@ -31,7 +35,7 @@ bun run dev
 
 `bun run dev` serves the web app and the API on named portless `.localhost` URLs (`bunx portless list`) and builds the extension in watch mode into `extension/wxt/.output/chrome-mv3-dev`. Load that directory in Chrome (`chrome://extensions`, Developer mode, Load unpacked), open the extension's Options page, and point it at the API URL portless printed. `PORTLESS=0 bun run dev` uses fixed ports instead (web `:3000`, API `:4000`, which is also the extension's baked-in default).
 
-📖 [Install guide](web/next/content/docs/getting-started/install.mdx) · [Ratings API](web/next/content/docs/getting-started/ratings-api.mdx)
+📖 [Run the stack](web/next/content/docs/getting-started/development.mdx) · [Ratings API](web/next/content/docs/getting-started/ratings-api.mdx)
 
 ## Scripts
 
