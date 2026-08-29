@@ -1,0 +1,32 @@
+{
+  "name": "@extension/wxt",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "wxt build",
+    "build:firefox": "wxt build -b firefox",
+    "check-types": "wxt prepare && tsc --noEmit",
+    "dev": "wxt",
+    "zip": "wxt zip",
+    "zip:firefox": "wxt zip -b firefox"
+  },
+  "dependencies": {
+    "@api/hono": "workspace:*",
+    "@packages/config": "workspace:*",
+    "@packages/env": "workspace:*",
+    "hono": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@wxt-dev/auto-icons": "catalog:",
+    "@wxt-dev/module-react": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "wxt": "catalog:"
+  }
+}

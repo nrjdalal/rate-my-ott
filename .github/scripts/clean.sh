@@ -5,9 +5,11 @@ bunx rimraf --glob \
   "**/*.tsbuildinfo" \
   "**/.generated" \
   "**/.next" \
+  "**/.output" \
   "**/.playwright-cli" \
   "**/.source" \
   "**/.turbo" \
+  "**/.wxt" \
   "**/bundle" \
   "**/coverage" \
   "**/dist" \

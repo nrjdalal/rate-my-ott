@@ -19,6 +19,10 @@
       "types": "./dist/db.d.mts",
       "default": "./dist/db.mjs"
     },
+    "./extension-wxt": {
+      "types": "./dist/extension-wxt.d.mts",
+      "default": "./dist/extension-wxt.mjs"
+    },
     "./load-dotenv": {
       "types": "./dist/load-dotenv.d.mts",
       "default": "./dist/load-dotenv.mjs"

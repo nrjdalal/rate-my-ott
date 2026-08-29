@@ -1,0 +1,6 @@
+@import "tailwindcss";
+
+@theme {
+  --color-imdb: #f5c518;
+  --font-sans: ui-sans-serif, system-ui, sans-serif;
+}
