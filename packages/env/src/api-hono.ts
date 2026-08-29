@@ -16,8 +16,7 @@ export const env = createEnv({
       .string()
       .transform((s) => s.split(",").map((v) => v.trim().replace(/\/$/, "")))
       .pipe(z.array(z.url())),
-    OMDB_API_KEY: z.string().min(1).optional(),
-    OMDB_API_URL: z.url().default("https://www.omdbapi.com"),
+    IMDB_DATASETS_URL: z.url().default("https://datasets.imdbws.com"),
   },
   runtimeEnv: {
     NODE_ENV: process.env.NODE_ENV,
@@ -26,8 +25,7 @@ export const env = createEnv({
     HONO_RATE_LIMIT: process.env.HONO_RATE_LIMIT,
     HONO_RATE_LIMIT_WINDOW_MS: process.env.HONO_RATE_LIMIT_WINDOW_MS,
     HONO_TRUSTED_ORIGINS: polyfillServer(process.env.HONO_TRUSTED_ORIGINS, "https://polyfill.url"),
-    OMDB_API_KEY: process.env.OMDB_API_KEY,
-    OMDB_API_URL: process.env.OMDB_API_URL,
+    IMDB_DATASETS_URL: process.env.IMDB_DATASETS_URL,
   },
   emptyStringAsUndefined: true,
 })

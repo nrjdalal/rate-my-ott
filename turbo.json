@@ -34,9 +34,8 @@
     "HONO_RATE_LIMIT",
     "HONO_RATE_LIMIT_WINDOW_MS",
     "HONO_TRUSTED_ORIGINS",
+    "IMDB_DATASETS_URL",
     "INTERNAL_API_URL",
-    "OMDB_API_KEY",
-    "OMDB_API_URL",
     "POSTGRES_URL",
     // Client variables
     "NEXT_PUBLIC_API_URL",
