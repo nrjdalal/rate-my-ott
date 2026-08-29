@@ -30,7 +30,7 @@ The API URL is baked at build from the repo-root `.env` (`WXT_PUBLIC_API_URL`, r
 ```bash
 bun run dev                                  # web + api + extension in watch mode to .output/chrome-mv3-dev (no browser is launched)
 cd extension/wxt && bun run build            # production build to .output/chrome-mv3
-cd extension/wxt && bun run build:firefox    # .output/firefox-mv3
+cd extension/wxt && bun run build:firefox    # .output/firefox-mv3 (Manifest V3 there too; the manifest carries the gecko id rate-my-ott@nrjdalal.com, which a signed update channel keys on, and declares no data collection)
 cd extension/wxt && bun run zip              # rate-my-ott-<version>-chrome.zip in .output/ (version = root package.json)
 ```
 
