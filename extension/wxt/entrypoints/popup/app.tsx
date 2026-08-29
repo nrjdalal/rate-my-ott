@@ -101,15 +101,15 @@ export function App() {
             <span className="text-amber-600">The IMDb index has not been built yet</span>
           ))}
       </p>
-      <footer className="mt-3 flex items-start justify-between gap-4 text-xs text-neutral-500">
+      <footer className="mt-3 flex flex-col gap-2 text-xs text-neutral-500">
         <button
           type="button"
-          className="font-medium text-neutral-700 hover:underline dark:text-neutral-300"
+          className="self-start font-medium text-neutral-700 hover:underline dark:text-neutral-300"
           onClick={() => browser.runtime.openOptionsPage()}
         >
           Options
         </button>
-        <span className="text-right">
+        <p>
           Information courtesy of{" "}
           <a
             href="https://www.imdb.com"
@@ -120,7 +120,7 @@ export function App() {
             IMDb
           </a>
           . Used with permission.
-        </span>
+        </p>
       </footer>
     </main>
   )

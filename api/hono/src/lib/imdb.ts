@@ -193,7 +193,7 @@ export const RUNTIME_MARGIN_MIN = 3
 export const OPEN_RUN_MIN_VOTES = 1000
 
 export type MatchOptions = {
-  // Accept only a candidate released the stated year exactly: for a spelling looser than the platform's (a subtitle dropped), a parent or a namesake is close enough to fool the tolerances.
+  // The spelling is looser than the platform's (a subtitle dropped). A film then must have been released the stated year exactly, since a subtitled film is another work ("Dune: Part Two" is not "Dune"); a series need only be well known and running that year, since a subtitled series is a season of it ("Monster: The Ed Gein Story" is IMDb's "Monster"), and a real spin-off has an IMDb entry of its own that the platform's spelling finds first.
   exactYear?: boolean
   // The current year, for a series whose run is open.
   now?: number
@@ -211,7 +211,8 @@ export function fitsQuery(
   const kind = imdbType(title.titleType)
   if (query.type && kind !== query.type) return false
   if (query.year && title.startYear !== null) {
-    if (options.exactYear && title.startYear !== query.year) return false
+    if (options.exactYear && kind !== "series" && title.startYear !== query.year) return false
+    if (options.exactYear && kind === "series" && votesOf(title) < OPEN_RUN_MIN_VOTES) return false
     if (kind === "series") {
       if (query.year < title.startYear - YEAR_TOLERANCE) return false
       if (title.endYear !== null) {
@@ -292,7 +293,7 @@ export const MISS_REASONS = ["ambiguous", "unknown", "unmatched", "unstated"] as
 export type MissReason = (typeof MISS_REASONS)[number]
 export type Outcome = { reason: MissReason | null; title: ImdbTitle | null }
 
-// The title the index holds for a query, spelling by spelling (as the platform wrote it, then without a parenthetical qualifier, then without a subtitle after a colon), stopping at the first spelling any candidate fits: what fits under the platform's own spelling is either the answer or an ambiguity, never a reason to try a looser one. The unsubtitled spelling names a parent or a namesake as easily as the title, so it is taken only for the stated year exactly.
+// The title the index holds for a query, spelling by spelling (as the platform wrote it, then without a parenthetical qualifier, then without a subtitle after a colon), stopping at the first spelling any candidate fits: what fits under the platform's own spelling is either the answer or an ambiguity, never a reason to try a looser one. The unsubtitled spelling names a namesake as easily as the title, so a film is taken under it only for the stated year exactly, and a series only when it is well known and running that year (a subtitled series is a season of it).
 export function resolveOutcome(
   query: TitleQuery,
   candidatesFor: (spelling: string) => ImdbTitle[],

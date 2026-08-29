@@ -687,7 +687,7 @@ describe("resolveTitle", () => {
   ])
   const lookup = (spelling: string) => index.get(spelling) ?? []
 
-  test("a parenthetical qualifier is dropped freely; a subtitle only for the stated year exactly", () => {
+  test("a parenthetical qualifier is dropped freely; a subtitle drops to the parent for a season, never for a film", () => {
     expect(
       resolveTitle({ title: "The Office (U.S.)", type: "series", year: 2012 }, lookup, NOW)?.id,
     ).toBe("tt0386676")
@@ -695,10 +695,6 @@ describe("resolveTitle", () => {
       resolveTitle({ title: "Squid Game: The Challenge", type: "series", year: 2023 }, lookup, NOW)
         ?.id,
     ).toBe("tt24003330")
-    // Unknown under its own name, the spin-off must not inherit the parent's score by dropping its subtitle.
-    expect(
-      resolveTitle({ title: "Squid Game: The Recruit", type: "series", year: 2025 }, lookup, NOW),
-    ).toBeNull()
     expect(
       resolveTitle(
         { title: "Operation Safed Sagar: The Untold Story", type: "series", year: 2026 },
@@ -706,6 +702,65 @@ describe("resolveTitle", () => {
         NOW,
       )?.id,
     ).toBe("tt36643714")
+    // A subtitled series unknown under its own name is a season of the parent: IMDb's "Monster" (2022-) is Netflix's "Monster: The Ed Gein Story" (2025).
+    const anthology = title({
+      endYear: null,
+      id: "tt13207736",
+      runtime: null,
+      startYear: 2022,
+      titleType: "tvSeries",
+      votes: 225875,
+    })
+    const anime = title({
+      endYear: 2005,
+      id: "tt0434706",
+      runtime: null,
+      startYear: 2004,
+      titleType: "tvSeries",
+      votes: 90000,
+    })
+    const monsters = (spelling: string) => (spelling === "Monster" ? [anime, anthology] : [])
+    expect(
+      resolveTitle(
+        { title: "Monster: The Ed Gein Story", type: "series", year: 2025 },
+        monsters,
+        NOW,
+      )?.id,
+    ).toBe("tt13207736")
+    expect(
+      resolveTitle(
+        { title: "Monster: The Jeffrey Dahmer Story", type: "series", year: 2022 },
+        monsters,
+        NOW,
+      )?.id,
+    ).toBe("tt13207736")
+    expect(
+      resolveTitle({ title: "Monster: Something", type: "series", year: 2010 }, monsters, NOW),
+    ).toBeNull()
+    // A subtitled series whose parent is obscure gets nothing; a subtitled film never drops to a namesake of another year.
+    const small = title({
+      endYear: null,
+      id: "tt9",
+      runtime: null,
+      startYear: 2022,
+      titleType: "tvSeries",
+      votes: 300,
+    })
+    expect(
+      resolveTitle(
+        { title: "Small: Season Two", type: "series", year: 2024 },
+        (s) => (s === "Small" ? [small] : []),
+        NOW,
+      ),
+    ).toBeNull()
+    const dune = title({ id: "tt1160419", runtime: 155, startYear: 2021, votes: 1086538 })
+    expect(
+      resolveTitle(
+        { title: "Dune: Part Two", type: "movie", year: 2024 },
+        (s) => (s === "Dune" ? [dune] : []),
+        NOW,
+      ),
+    ).toBeNull()
   })
 
   test("an ambiguity under the platform's own spelling is final; a looser spelling is not tried", () => {
