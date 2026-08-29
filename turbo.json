@@ -3,7 +3,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [".next/**", "!.next/cache/**", ".source/**", "bundle/**", "dist/**"]
+      "outputs": [".next/**", "!.next/cache/**", ".output/**", ".source/**", "bundle/**", "dist/**"]
     },
     "build:vercel": {
       "dependsOn": ["^build"],
@@ -35,13 +35,16 @@
     "HONO_RATE_LIMIT_WINDOW_MS",
     "HONO_TRUSTED_ORIGINS",
     "INTERNAL_API_URL",
+    "OMDB_API_KEY",
+    "OMDB_API_URL",
     "POSTGRES_URL",
     // Client variables
     "NEXT_PUBLIC_API_URL",
     "NEXT_PUBLIC_APP_URL",
     "NEXT_PUBLIC_POSTHOG_HOST",
     "NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN",
-    "NEXT_PUBLIC_USERJOT_URL"
+    "NEXT_PUBLIC_USERJOT_URL",
+    "WXT_PUBLIC_API_URL"
   ],
   "globalPassThroughEnv": ["PORTLESS", "PORTLESS_HTTPS", "PORTLESS_PORT", "PORTLESS_SYNC_HOSTS"]
 }
