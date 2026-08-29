@@ -1,0 +1,9 @@
+// Extends the subject's own config for its @/ paths. The tests themselves import by relative path: @/ would be ambiguous here, since every package defines it against its own src.
+{
+  "extends": "../../../web/next/tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["bun"]
+  },
+  "include": ["**/*.ts"]
+}

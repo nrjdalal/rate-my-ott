@@ -194,6 +194,8 @@ async function rebuild(tx: Transaction, started: number) {
   // The record of this rebuild lands with it, so the newest row always describes the index that is serving.
   let spellings = 0
   for (const list of keys.values()) spellings += list.length
+  // One record a night is all the history worth keeping; older ones go so the table never grows past a season.
+  await tx.execute(sql`delete from imdb_sync where finished_at < now() - interval '90 days'`)
   // Stamped from here, not by the database default: now() inside the transaction is when it began, a minute or two earlier.
   await tx.insert(imdbSync).values({
     akas,

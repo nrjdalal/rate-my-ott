@@ -9,6 +9,7 @@ import {
 } from "@remixicon/react"
 import Link from "next/link"
 
+import { IndexStat } from "@/components/index-stat"
 import { Button } from "@/components/ui/button"
 
 const steps = [
@@ -92,6 +93,7 @@ export default function Home() {
             <p className="text-muted-foreground mt-4 text-xs">
               Unzip, then load the folder from chrome://extensions with Developer mode on.
             </p>
+            <IndexStat />
           </div>
         </section>
 
