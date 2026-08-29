@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.0.2
+
+[compare changes](https://github.com/nrjdalal/rate-my-ott/compare/v0.0.1...v0.0.2)
+
+### 🚀 Enhancements
+
+- **ci:** Tell release readers which zip is the extension ([ab904e1](https://github.com/nrjdalal/rate-my-ott/commit/ab904e1))
+- Answer every rating from an IMDb index and remove OMDb ([#3](https://github.com/nrjdalal/rate-my-ott/pull/3))
+
+### 🩹 Fixes
+
+- **ci:** Export the api url to both extension zip builds in the release ([834dd5e](https://github.com/nrjdalal/rate-my-ott/commit/834dd5e))
+- **ci:** Upload only the browser zips to a release, not the firefox sources archive ([ae43133](https://github.com/nrjdalal/rate-my-ott/commit/ae43133))
+
+### ❤️ Contributors
+
+- Neeraj Dalal @nrjdalal
+
 ## v0.0.1
 
 ### 🚀 Enhancements
