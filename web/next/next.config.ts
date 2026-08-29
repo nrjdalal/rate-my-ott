@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs"
-import { resolve } from "node:path"
-
 import { getSafeEnv } from "@packages/env"
 // Must stay above the web-next import: that module validates env when it evaluates, and imports hoist, so a call placed lower would run too late. oxfmt treats a bare import as a sort barrier, so the order holds.
 import "@packages/env/load-dotenv"
@@ -9,18 +6,6 @@ import { createMDX } from "fumadocs-mdx/next"
 import type { NextConfig } from "next"
 
 getSafeEnv(env, "@web/next")
-
-// @packages/scripts/src/generate-env.ts (web target) derives this before next build (next.config cannot read NEXT_PUBLIC_ vars itself); inline it as NEXT_PUBLIC_IS_PRIVATE so that on a public hosting suffix the client routes auth same-origin. Missing file (e.g. a bare next build) falls back to false.
-const isPrivate = (() => {
-  for (const candidate of [".generated/web-env.json", "../../.generated/web-env.json"]) {
-    try {
-      return JSON.parse(readFileSync(resolve(process.cwd(), candidate), "utf8")).isPrivate === true
-    } catch {
-      continue
-    }
-  }
-  return false
-})()
 
 function detectLibc() {
   if (process.platform !== "linux") return undefined
@@ -58,9 +43,8 @@ const appDevHost = (() => {
 })()
 
 const nextConfig: NextConfig = {
-  // Off because this repo writes its own agent guides: the root AGENTS.md is generated (skills-manager owns its skills tables) and CLAUDE.md is a symlink to it, so a second writer would fight both. Left on, `next dev` upserts a managed block whenever it detects an AI agent, and its own text says removing it from a diff only re-creates it. The Next 16.3 docs it points at are worth reading; see the AI agents note in web/next/content/docs/getting-started/working-with-agents.mdx.
+  // Off because this repo writes its own agent guides: the root AGENTS.md is generated (skills-manager owns its skills tables) and CLAUDE.md is a symlink to it, so a second writer would fight both. Left on, `next dev` upserts a managed block whenever it detects an AI agent, and its own text says removing it from a diff only re-creates it.
   agentRules: false,
-  env: { NEXT_PUBLIC_IS_PRIVATE: String(isPrivate) },
   // Standalone is the Docker runner's input only. Vercel builds through a Next adapter, and since 16.3.0 an adapter build writes no .nft.json trace files, so the standalone copy step reads next-server.js.nft.json and fails the build with ENOENT.
   ...(!process.env.VERCEL && { output: "standalone" as const }),
   ...(appDevHost && { allowedDevOrigins: [appDevHost, `*.${appDevHost}`] }),
@@ -77,14 +61,6 @@ const nextConfig: NextConfig = {
       {
         source: "/api/:path*",
         destination: `${env.INTERNAL_API_URL || env.NEXT_PUBLIC_API_URL}/api/:path*`,
-      },
-      {
-        source: "/blog/:path*.md",
-        destination: "/llms.txt/blog/:path*",
-      },
-      {
-        source: "/blog/:path*.txt",
-        destination: "/llms.txt/blog/:path*",
       },
       {
         source: "/docs/:path*.md",

@@ -26,8 +26,8 @@ export default defineConfig({
   entry: [
     "src/index.ts",
     "src/api-hono.ts",
-    "src/auth.ts",
     "src/db.ts",
+    "src/extension-wxt.ts",
     "src/load-dotenv.ts",
     "src/web-next.ts",
   ],

@@ -8,16 +8,13 @@ export const dynamic = "force-static"
 export const revalidate = 60
 
 export async function GET() {
-  // pages() already applies each kind's feature gate and blog publish policy, returning [] when off.
-  const pages = [
-    ...sortByMeta(contentSource("docs").pages(), docsMeta.pages, "/docs"),
-    ...contentSource("blog").pages(),
-  ]
+  // pages() already applies the docs feature gate, returning [] when off.
+  const pages = sortByMeta(contentSource("docs").pages(), docsMeta.pages, "/docs")
 
   const scanned = await Promise.all(pages.map(getLLMText))
 
   return new Response(
-    `# ${site.name} – LLM Context File
+    `# ${site.name} - LLM Context File
 
 > ${site.description}
 

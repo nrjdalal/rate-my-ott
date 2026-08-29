@@ -1,0 +1,76 @@
+---
+slug: /docs/getting-started/ratings-api
+label: Ratings API
+title: The Ratings API
+description: "What the extension calls: one batch endpoint over a Postgres cache, with OMDb behind it."
+---
+
+The extension talks to one endpoint. Everything about it lives in `api/hono/src/routers/ratings.ts` and the two modules beside it in `lib/`: `omdb.ts` (the provider, pure parsing) and `ratings.ts` (the cache).
+
+## `POST /api/v1/ratings`
+
+```json
+{
+  "titles": [
+    { "title": "Rick and Morty", "type": "series" },
+    { "title": "Dune", "year": 2021 }
+  ]
+}
+```
+
+Up to 50 titles per call. `type` (`movie` or `series`), `year`, and `runtime` (minutes) are optional and worth sending when known. `type` and `year` are part of the cache key and of the OMDb query, which is what keeps a remake apart from the original; `year` and `runtime` also gate the answer: OMDb's best match is kept only when its year is within one of the platform's and, for a film, its runtime within five minutes, otherwise the year and its neighbours are searched for an exact-name candidate that fits, and a same-name stranger becomes a miss rather than a wrong score. The answer is one entry per title, in the order asked:
+
+```json
+{
+  "data": {
+    "ratings": [
+      {
+        "fetchedAt": "2026-08-29T10:00:00.000Z",
+        "found": true,
+        "imdbId": "tt2861424",
+        "imdbRating": 9.1,
+        "imdbVotes": 640123,
+        "key": "rick and morty||series",
+        "metascore": null,
+        "poster": "https://m.media-amazon.com/images/M/example.jpg",
+        "rottenTomatoes": 94,
+        "title": "Rick and Morty",
+        "type": "series",
+        "year": 2013
+      }
+    ]
+  }
+}
+```
+
+A title OMDb does not know comes back with `found: false` and the provider fields null. `GET /api/v1/ratings?title=Dune&year=2021` answers one title the same way, for a quick check from the browser or curl. The interactive reference at [`/api/docs`](/api/docs) has both.
+
+## The cache
+
+Every answer, hit or miss, is a row in the `rating` table keyed by the normalized `title|year|type`. A hit is served for seven days, a miss for one, then the next request refreshes it in place. Within a request the API asks OMDb for at most five titles at a time.
+
+## Errors
+
+The usual envelope, `{ "error": { "code", "message" } }`, with two codes of its own: `503 SERVICE_UNAVAILABLE` when `OMDB_API_KEY` is not set, and `502 BAD_GATEWAY` when OMDb is down, refuses the key, or reports the daily limit reached. `400 VALIDATION_ERROR` carries the failing fields.
+
+## Calling it with types
+
+Both the web app and the extension use the Hono RPC client, so the request and response types come from the route itself:
+
+```ts
+import { apiClient, unwrap } from "@/lib/api/client"
+
+const { data, error } = await unwrap(
+  apiClient.v1.ratings.$post({ json: { titles: [{ title: "Rick and Morty" }] } }),
+)
+```
+
+## Environment
+
+| Variable             | Where           | Meaning                                                                     |
+| -------------------- | --------------- | --------------------------------------------------------------------------- |
+| `OMDB_API_KEY`       | API             | The OMDb key. Optional; without it the route answers 503.                   |
+| `OMDB_API_URL`       | API             | Defaults to `https://www.omdbapi.com`; point it at a mock during tests.     |
+| `WXT_PUBLIC_API_URL` | extension build | The API origin baked into the extension and granted as its host permission. |
+
+OMDb data is licensed CC BY-NC 4.0: fine for a personal build, and attributed in the extension popup; a commercial release needs a paid OMDb tier or another provider behind `lib/omdb.ts`.

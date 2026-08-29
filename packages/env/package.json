@@ -15,13 +15,13 @@
       "types": "./dist/api-hono.d.mts",
       "default": "./dist/api-hono.mjs"
     },
-    "./auth": {
-      "types": "./dist/auth.d.mts",
-      "default": "./dist/auth.mjs"
-    },
     "./db": {
       "types": "./dist/db.d.mts",
       "default": "./dist/db.mjs"
+    },
+    "./extension-wxt": {
+      "types": "./dist/extension-wxt.d.mts",
+      "default": "./dist/extension-wxt.mjs"
     },
     "./load-dotenv": {
       "types": "./dist/load-dotenv.d.mts",

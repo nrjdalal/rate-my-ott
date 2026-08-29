@@ -42,9 +42,11 @@ next-env.d.ts
 
 # custom directories
 .generated/
+.output/
 .playwright-cli/
 .source/
 .turbo/
+.wxt/
 bundle/
 dist/
 vercel-bundle/
@@ -54,8 +56,7 @@ vercel-bundle/
 .npmrc
 *.local.json
 cookies.txt
-web/next/content/blog/meta.json
-web/next/content/console/docs/meta.json
+web-ext.config.ts
 web/next/content/docs/meta.json
 
 # docker overrides

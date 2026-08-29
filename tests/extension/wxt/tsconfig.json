@@ -1,0 +1,10 @@
+// Extends the subject's own config (which extends the generated .wxt/tsconfig.json, so `wxt prepare` must have run) for its @/ paths.
+// The tests themselves import by relative path: @/ would be ambiguous here, since every package defines it against its own src.
+{
+  "extends": "../../../extension/wxt/tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["bun"]
+  },
+  "include": ["**/*.ts"]
+}

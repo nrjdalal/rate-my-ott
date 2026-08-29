@@ -8,7 +8,6 @@ import { polyfillServer } from "@/lib/polyfill"
 export const env = createEnv({
   server: {
     NODE_ENV,
-    AGENT_SIGNIN_ENABLED: z.stringbool().default(false),
     HONO_APP_URL: z.url(),
     HONO_PORT: z.coerce.number().default(4000),
     HONO_RATE_LIMIT: z.coerce.number().default(60),
@@ -17,15 +16,18 @@ export const env = createEnv({
       .string()
       .transform((s) => s.split(",").map((v) => v.trim().replace(/\/$/, "")))
       .pipe(z.array(z.url())),
+    OMDB_API_KEY: z.string().min(1).optional(),
+    OMDB_API_URL: z.url().default("https://www.omdbapi.com"),
   },
   runtimeEnv: {
     NODE_ENV: process.env.NODE_ENV,
-    AGENT_SIGNIN_ENABLED: process.env.AGENT_SIGNIN_ENABLED,
     HONO_APP_URL: polyfillServer(process.env.HONO_APP_URL, "https://polyfill.url"),
     HONO_PORT: process.env.HONO_PORT,
     HONO_RATE_LIMIT: process.env.HONO_RATE_LIMIT,
     HONO_RATE_LIMIT_WINDOW_MS: process.env.HONO_RATE_LIMIT_WINDOW_MS,
     HONO_TRUSTED_ORIGINS: polyfillServer(process.env.HONO_TRUSTED_ORIGINS, "https://polyfill.url"),
+    OMDB_API_KEY: process.env.OMDB_API_KEY,
+    OMDB_API_URL: process.env.OMDB_API_URL,
   },
   emptyStringAsUndefined: true,
 })

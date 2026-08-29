@@ -1,7 +1,7 @@
 ---
 name: gh-commit
 description: Create atomic commits in the conventional format. Use when the user asks to commit or save changes.
-source: local
+source: https://github.com/nrjdalal/zerostarter
 ---
 
 # Git Commit
@@ -44,9 +44,9 @@ Never add `Co-authored-by` (repo rule). The commit-msg hook runs commitlint (`@c
 **Examples**:
 
 ```
-feat(auth): add OAuth provider support
+feat(api): add the ratings lookup route
 fix(api): prevent duplicate webhook delivery
-refactor(web): extract auth middleware into separate module
+refactor(web): extract navbar links into a config
 docs(readme): update installation steps
 chore(deps): bump dependencies to latest versions
 ```

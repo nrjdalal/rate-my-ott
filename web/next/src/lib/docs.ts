@@ -16,10 +16,9 @@ export type DocsItem = Record<string, DocsMeta | DocsItem[]>
 // A collection maps group labels to their ordered items.
 export type DocsCollection = Record<string, DocsItem[]>
 
-// Each collection's content dir mirrors its URL base: docs -> content/docs, console -> content/console/docs.
+// Each collection's content dir mirrors its URL base: docs -> content/docs.
 export type DocsConfig = {
   docs: DocsCollection
-  console: DocsCollection
 }
 
 // Resolved sidebar shape (output of resolveDocsNav): a page is a leaf with a url, a group is a label with nested nodes.
@@ -51,7 +50,7 @@ export function resolveDocsNav(collection: keyof typeof docsConfig): NavGroup[] 
   }))
 }
 
-// True when the pathname sits inside a docs collection (any "docs" path segment, e.g. /docs/* or /console/docs/*). Single source for the docs-mode UX: offcanvas sidebar + desktop edge tab.
+// True when the pathname sits inside a docs collection (any "docs" path segment, e.g. /docs/*). Single source for the docs-mode UX: offcanvas sidebar + desktop edge tab.
 export function isDocsPath(pathname: string): boolean {
   return pathname.split("/").includes("docs")
 }

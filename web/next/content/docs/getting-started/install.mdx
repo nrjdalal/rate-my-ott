@@ -1,0 +1,46 @@
+---
+slug: /docs/getting-started/install
+label: Install
+title: Install the extension
+description: Get an OMDb key, run the stack, load the extension into Chrome, and point it at the API.
+---
+
+## Just want to use it?
+
+Every release on GitHub carries a ready-made build against the hosted API, one zip per browser: [github.com/nrjdalal/rate-my-ott/releases/latest](https://github.com/nrjdalal/rate-my-ott/releases/latest). Chrome does not install extensions from outside its Web Store, so unzip `rate-my-ott-<version>-chrome.zip`, open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and pick the unzipped folder; a new release means unzipping again and clicking the card's reload icon. Nothing below is needed for that, the steps that follow are for running the stack yourself.
+
+## 1. Get an OMDb key
+
+The API answers ratings from [OMDb](https://www.omdbapi.com/apikey.aspx). A free key allows 1,000 requests a day, which the Postgres cache stretches a long way, since a title is fetched once and then served from the cache for a week. Put the key in the repo-root `.env`:
+
+```bash
+OMDB_API_KEY=your-key
+```
+
+Leave it blank and the rest of the API keeps working; only `/api/v1/ratings` answers `503` until it is set.
+
+## 2. Run the stack
+
+```bash
+bun install
+bun run db:migrate   # once, after POSTGRES_URL is set
+bun run dev
+```
+
+This serves the web app and the API on named portless URLs (`bunx portless list` shows them) and builds the extension in watch mode into `extension/wxt/.output/chrome-mv3-dev`. `PORTLESS=0 bun run dev` uses the fixed ports instead (web `:3000`, API `:4000`).
+
+## 3. Load the extension
+
+In Chrome, open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and pick `extension/wxt/.output/chrome-mv3-dev`. The extension rebuilds as you edit; click the reload icon on its card (or press `Alt+R` on a Netflix tab) to pick up a new build.
+
+For a production build, `bun run build` writes `extension/wxt/.output/chrome-mv3` without the dev client, and `cd extension/wxt && bun run zip` packs it for the store.
+
+## 4. Point it at the API
+
+The build bakes `WXT_PUBLIC_API_URL` from `.env` (`http://localhost:4000` by default, the fixed-port API) as the extension's API origin. Under portless the API is at `http://api.rate-my-ott.localhost:1355` instead, so open the extension's **Options** page, paste that URL, and click **Test**: it should report the API version. A dev build already holds the host permission for both hosts, so no rebuild is needed.
+
+Then open Netflix. Title cards get an IMDb badge in the corner, and opening a title shows a ratings row under its metadata.
+
+## Firefox
+
+`cd extension/wxt && bun run build:firefox` writes `.output/firefox-mv3`; load it from `about:debugging` as a temporary add-on.

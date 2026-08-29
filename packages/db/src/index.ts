@@ -34,6 +34,5 @@ if (env.NODE_ENV === "production") {
 }
 
 export { db }
-export * from "@/console"
 export * from "@/schema"
 export type * from "@/types"

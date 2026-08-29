@@ -1,7 +1,5 @@
 import { MetadataRoute } from "next"
 
-import { getPublishedBlogPosts } from "@/lib/blog"
-import { toBlogDate } from "@/lib/blog-policy"
 import { config } from "@/lib/config"
 import { contentSource } from "@/lib/content"
 
@@ -9,7 +7,6 @@ export const dynamic = "force-static"
 export const revalidate = 60
 
 const docs = contentSource("docs")
-const blog = contentSource("blog")
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = config.app.url
@@ -31,17 +28,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.9,
   }))
 
-  // Blog pages: gate on the seam's `enabled`, but read through getPublishedBlogPosts() (not pages()) for its narrowed `publishedAt: string`, which lastModified needs. Empty when the blog feature is off.
-  const blogRoutes: MetadataRoute.Sitemap = blog.enabled
-    ? getPublishedBlogPosts().map((page) => ({
-        url: `${baseUrl}${page.url}`,
-        lastModified: toBlogDate(page.data.updatedAt ?? page.data.publishedAt),
-        changeFrequency: "monthly" as const,
-        priority: 0.9,
-      }))
-    : []
-
-  // Combine all pages and sort
-  const allPages = [...staticRoutes, ...docsRoutes, ...blogRoutes]
+  const allPages = [...staticRoutes, ...docsRoutes]
   return allPages.sort((a, b) => a.url.localeCompare(b.url))
 }
