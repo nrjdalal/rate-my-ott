@@ -43,6 +43,8 @@ jobs:
           }
           attach_extension() {
             (cd extension/wxt && export WXT_PUBLIC_API_URL="${{ vars.WXT_PUBLIC_API_URL }}" && bun run zip && bun run zip:firefox)
+            # an unversioned copy per browser, so releases/latest/download/rate-my-ott-<browser>.zip is a stable link
+            for browser in chrome firefox; do cp extension/wxt/.output/rate-my-ott-*-"$browser".zip extension/wxt/.output/rate-my-ott-"$browser".zip; done
             gh release upload "$1" extension/wxt/.output/rate-my-ott-*.zip --clobber
           }
           # the changelog commit is mechanical (generated from already-reviewed PR titles),

@@ -2,7 +2,7 @@
 
 > IMDb ratings on every title while you browse Netflix, with more streaming platforms to come.
 
-A browser extension plus the small API behind it, built on [ZeroStarter](https://zerostarter.dev). The extension reads the titles Netflix renders, asks the Ratings API in batches, and paints an IMDb badge on every card and an "IMDb:" row in the title modal's details. The API answers from its own IMDb index: IMDb's daily datasets, imported into Postgres every night, matched by name, kind, year, and runtime.
+A browser extension plus the small API behind it, built on [ZeroStarter](https://zerostarter.dev). The extension reads the titles Netflix renders, asks the Ratings API in batches, and paints an IMDb badge on every card, "• IMDb 8.5" in the billboard's metadata line, and an "IMDb:" row in the title modal's details. The API answers from its own IMDb index: IMDb's daily datasets, imported into Postgres every night, matched by name, kind, year, and runtime.
 
 ## Monorepo structure
 
@@ -51,7 +51,7 @@ bun run dev
 
 ## Releases
 
-Promoting `canary` to `main` cuts a release (changelog, version bump, GitHub release), and the release workflow attaches the extension zips built against the production API: `rate-my-ott-<version>-chrome.zip` and `-firefox.zip`, on [releases/latest](https://github.com/nrjdalal/rate-my-ott/releases/latest). The extension's manifest version is the repo version, so a zip, the changelog, and a store listing agree.
+Promoting `canary` to `main` cuts a release (changelog, version bump, GitHub release), and the release workflow attaches the extension zips built against the production API: `rate-my-ott-<version>-chrome.zip` and `-firefox.zip`, on [releases/latest](https://github.com/nrjdalal/rate-my-ott/releases/latest), plus unversioned copies (`rate-my-ott-chrome.zip`, `rate-my-ott-firefox.zip`) so the `releases/latest/download/` links stay stable. The extension's manifest version is the repo version, so a zip, the changelog, and a store listing agree.
 
 ## Deployment
 

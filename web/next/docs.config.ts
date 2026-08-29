@@ -30,6 +30,14 @@ const docsConfig: DocsConfig = {
         },
       },
     ],
+    Project: [
+      {
+        "/docs/privacy": {
+          title: "Privacy",
+          description: "What the extension sends, what the API keeps, and what neither does.",
+        },
+      },
+    ],
   },
 }
 
