@@ -11,24 +11,24 @@ const steps = [
   },
   {
     title: "Ratings arrive in batches",
-    body: "Titles go to the Ratings API a batch at a time. It answers from its cache and asks OMDb only for what it has not seen.",
+    body: "Titles go to the Ratings API a batch at a time, with the year, kind, and runtime Netflix knows, so the right Alpha comes back.",
   },
   {
     title: "Read the score, not the pitch",
-    body: "Each card gets an IMDb badge; the title modal gets IMDb, Rotten Tomatoes, and Metacritic with a link to IMDb.",
+    body: "Each card gets an IMDb badge; the title modal gets the score, the vote count, and a link to the IMDb page.",
   },
 ]
 
 const facts = [
   {
     icon: RiStarFill,
-    title: "Three scores",
-    body: "IMDb, Rotten Tomatoes, and Metacritic, from one OMDb lookup per title.",
+    title: "IMDb, exactly",
+    body: "Matched in IMDb's own daily datasets by name, kind, year, and runtime; an ambiguous title gets no score rather than a wrong one.",
   },
   {
     icon: RiFlashlightLine,
-    title: "Cached, so it is quick",
-    body: "A title is fetched once and served from Postgres for a week; a session costs a handful of provider calls.",
+    title: "Fresh every night",
+    body: "The index is rebuilt from IMDb every day, and a lookup is one query, so nothing waits on a third-party API or its quota.",
   },
   {
     icon: RiFilmLine,
@@ -105,16 +105,16 @@ export default function Home() {
         </section>
       </main>
       <footer className="text-muted-foreground border-t px-4 py-10 text-center text-sm md:px-6">
-        Ratings by{" "}
+        Information courtesy of{" "}
         <a
-          href="https://www.omdbapi.com"
+          href="https://www.imdb.com"
           target="_blank"
           rel="noopener noreferrer"
           className="underline"
         >
-          OMDb
+          IMDb
         </a>
-        , licensed CC BY-NC 4.0. Not affiliated with Netflix.
+        . Used with permission. Not affiliated with Netflix.
       </footer>
     </>
   )

@@ -2,10 +2,10 @@
 slug: /docs/getting-started/ratings-api
 label: Ratings API
 title: The Ratings API
-description: "What the extension calls: one batch endpoint over a Postgres cache, with OMDb behind it."
+description: "What the extension calls: one batch endpoint over the IMDb index, IMDb's daily datasets in Postgres."
 ---
 
-The extension talks to one endpoint. Everything about it lives in `api/hono/src/routers/ratings.ts` and the two modules beside it in `lib/`: `omdb.ts` (the provider, pure parsing) and `ratings.ts` (the cache).
+The extension talks to one endpoint. Everything about it lives in `api/hono/src/routers/ratings.ts` and three modules beside it in `lib/`: `imdb.ts` (the dataset rows, the keep filter, and the matching, all pure), `lookup.ts` (query keys, spelling variants, batch alignment, pure) and `ratings.ts` (the one query per batch). There is no third-party ratings API behind it and no cache in front of it.
 
 ## `POST /api/v1/ratings`
 
@@ -13,45 +13,65 @@ The extension talks to one endpoint. Everything about it lives in `api/hono/src/
 {
   "titles": [
     { "title": "Rick and Morty", "type": "series" },
-    { "title": "Dune", "year": 2021 }
+    { "title": "Alpha", "type": "movie", "year": 2026, "runtime": 140 }
   ]
 }
 ```
 
-Up to 50 titles per call. `type` (`movie` or `series`), `year`, and `runtime` (minutes) are optional and worth sending when known. `type` and `year` are part of the cache key and of the OMDb query, which is what keeps a remake apart from the original; `year` and `runtime` also gate the answer: OMDb's best match is kept only when its year is within one of the platform's and, for a film, its runtime within five minutes, otherwise the year and its neighbours are searched for an exact-name candidate that fits, and a same-name stranger becomes a miss rather than a wrong score. The answer is one entry per title, in the order asked:
+Up to 50 titles per call. `type` (`movie` or `series`), `year`, and `runtime` (minutes) are optional in the request, but a title is only ever matched when its `year` is stated, and `type` and `runtime` are what tell a remake, a same-name film from another country, or a show's namesake apart. The answer is one entry per title, in the order asked:
 
 ```json
 {
   "data": {
     "ratings": [
       {
-        "fetchedAt": "2026-08-29T10:00:00.000Z",
         "found": true,
         "imdbId": "tt2861424",
         "imdbRating": 9.1,
         "imdbVotes": 640123,
-        "key": "rick and morty||series",
         "metascore": null,
-        "poster": "https://m.media-amazon.com/images/M/example.jpg",
-        "rottenTomatoes": 94,
+        "poster": null,
+        "rottenTomatoes": null,
         "title": "Rick and Morty",
         "type": "series",
         "year": 2013
+      },
+      {
+        "found": true,
+        "imdbId": "tt28363783",
+        "imdbRating": 6.1,
+        "imdbVotes": 12000,
+        "metascore": null,
+        "poster": null,
+        "rottenTomatoes": null,
+        "title": "Alpha",
+        "type": "movie",
+        "year": 2025
       }
     ]
   }
 }
 ```
 
-A title OMDb does not know comes back with `found: false` and the provider fields null. `GET /api/v1/ratings?title=Dune&year=2021` answers one title the same way, for a quick check from the browser or curl. The interactive reference at [`/api/docs`](/api/docs) has both.
+`title` and `year` in an answer are IMDb's, so a card that said 2026 can come back as 2025 (a regional release a year late). `metascore`, `poster`, and `rottenTomatoes` are always null: they are kept for one release so the v0.0.1 extension, which still reads them, does not paint "undefined". A title the index cannot match with certainty comes back with `found: false` and the IMDb fields null; a title it knows but nobody has rated yet comes back `found: true` with `imdbRating: null`. `GET /api/v1/ratings?title=Dune&year=2021` answers one title the same way, for a quick check from the browser or curl. The interactive reference at [`/api/docs`](/api/docs) has both.
 
-## The cache
+## How a title is matched
 
-Every answer, hit or miss, is a row in the `rating` table keyed by the normalized `title|year|type`. A hit is served for seven days, a miss for one, then the next request refreshes it in place. Within a request the API asks OMDb for at most five titles at a time.
+The index holds every IMDb film, TV film, special, series, and mini-series that is rated or from this year or last, and every short and video with 100+ votes (about 620,000 titles), each under its primary and original name, keyed by a spelling that folds case, width, diacritics, punctuation, and `&`. A lookup fetches the candidates for every spelling of every title in the batch in one query (as written, then without a parenthetical qualifier, then without a subtitle after a colon), and decides per title in `resolveTitle`, stopping at the first spelling any candidate fits:
+
+1. A candidate fits when the kind agrees, a film's year is within one of its release, a series' run contains the stated year (a year either side, since Netflix states a show's latest season; a run IMDb has not closed reaches the present only for a show with 1,000+ votes), and a film's runtime is within five minutes when both are known. Under the unsubtitled spelling the year must match exactly, so a spin-off never inherits its parent's score.
+2. Nothing is taken without a stated year. Once any candidate can be checked against what was stated, the ones that cannot (no year on IMDb, no runtime) drop out, but still veto a pick they out-vote three to one. A film and a series of one name with no kind stated are an ambiguity.
+3. One candidate left is the answer. Several are ranked by closest runtime (films), then votes, and the best is taken only when something separates it: a runtime closer by three minutes or more, or 100+ votes that are three times the runner-up's, which is never enough under the unsubtitled spelling and never while a candidate in the running is too new to have earned its votes (unrated, or under 100 votes and from this year or last: a title that new is as likely Netflix's as its popular twin).
+
+A wrong score is worse than none, so every ambiguity is a miss. The [imdb-sync skill](https://github.com/nrjdalal/rate-my-ott/blob/canary/.agents/skills/imdb-sync/SKILL.md) is the procedure for diagnosing one.
+
+## The index
+
+`bun run imdb:sync` (`api/hono/src/jobs/imdb-sync.ts`) streams IMDb's `title.ratings` and `title.basics` datasets (about 235 MB gzipped) and upserts them into `imdb_title` and `imdb_name`, writing only rows that changed, dropping the spellings a renamed title no longer answers to, and pruning titles that left the dataset; a full rebuild takes about a minute locally and a few minutes from CI. In production the `auto-imdb-sync` workflow runs it every day at 14:30 UTC, after IMDb's own refresh. The two tables take about 200 MB.
 
 ## Errors
 
-The usual envelope, `{ "error": { "code", "message" } }`, with two codes of its own: `503 SERVICE_UNAVAILABLE` when `OMDB_API_KEY` is not set, and `502 BAD_GATEWAY` when OMDb is down, refuses the key, or reports the daily limit reached. `400 VALIDATION_ERROR` carries the failing fields.
+The usual envelope, `{ "error": { "code", "message" } }`, with one code of its own: `503 SERVICE_UNAVAILABLE` while the index is empty (the sync has not run yet). `400 VALIDATION_ERROR` carries the failing fields.
 
 ## Calling it with types
 
@@ -67,10 +87,9 @@ const { data, error } = await unwrap(
 
 ## Environment
 
-| Variable             | Where           | Meaning                                                                     |
-| -------------------- | --------------- | --------------------------------------------------------------------------- |
-| `OMDB_API_KEY`       | API             | The OMDb key. Optional; without it the route answers 503.                   |
-| `OMDB_API_URL`       | API             | Defaults to `https://www.omdbapi.com`; point it at a mock during tests.     |
-| `WXT_PUBLIC_API_URL` | extension build | The API origin baked into the extension and granted as its host permission. |
+| Variable             | Where           | Meaning                                                                                       |
+| -------------------- | --------------- | --------------------------------------------------------------------------------------------- |
+| `IMDB_DATASETS_URL`  | API (sync job)  | Defaults to `https://datasets.imdbws.com`; point it at a directory served over HTTP in tests. |
+| `WXT_PUBLIC_API_URL` | extension build | The API origin baked into the extension and granted as its host permission.                   |
 
-OMDb data is licensed CC BY-NC 4.0: fine for a personal build, and attributed in the extension popup; a commercial release needs a paid OMDb tier or another provider behind `lib/omdb.ts`.
+IMDb's datasets are free for personal and non-commercial use and ask for attribution ("Information courtesy of IMDb. Used with permission."), which the extension popup and this site carry; a commercial release needs a licensing agreement with IMDb.

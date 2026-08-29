@@ -3,17 +3,18 @@ import { Hono } from "hono"
 import { describeRoute, resolver } from "hono-openapi"
 import { z } from "zod"
 
-import { ApiError, providerErrorResponses, validationErrorResponses } from "@/lib/error"
-import { TITLE_TYPES } from "@/lib/omdb"
+import { ApiError, indexErrorResponses, validationErrorResponses } from "@/lib/error"
+import { TITLE_TYPES } from "@/lib/lookup"
 import { lookupRatings, type Rating } from "@/lib/ratings"
 
-// The most titles one request will look up: a Netflix row holds a few dozen cards and the extension flushes what it sees in short windows, so fifty covers a burst without letting one call hold the provider for long.
+// The most titles one request will look up: a Netflix row holds a few dozen cards and the extension flushes what it sees in short windows, so fifty covers a burst in one round trip to the index.
 export const MAX_TITLES = 50
 
 const titleQuerySchema = z.object({
   // Minutes; a film's length as the platform states it, which tells two same-name films of one year apart.
   runtime: z.coerce.number().int().min(1).max(3000).optional().meta({ example: 140 }),
-  title: z.string().trim().min(1).max(200).meta({ example: "Rick and Morty" }),
+  // Long enough for a light-novel adaptation's full name (Netflix renders titles over 200 characters), since one refused title fails its whole batch.
+  title: z.string().trim().min(1).max(500).meta({ example: "Rick and Morty" }),
   type: z.enum(TITLE_TYPES).optional().meta({ example: "series" }),
   year: z.coerce.number().int().min(1888).max(2100).optional().meta({ example: 2013 }),
 })
@@ -22,19 +23,15 @@ const batchSchema = z.object({
   titles: z.array(titleQuerySchema).min(1).max(MAX_TITLES),
 })
 
+// metascore, poster, and rottenTomatoes are always null: the v0.0.1 extension reads them and would paint "undefined" were they missing. Drop them in the next minor.
 const ratingSchema = z.object({
-  fetchedAt: z.string().meta({ format: "date-time", example: "2026-08-29T10:00:00.000Z" }),
   found: z.boolean().meta({ example: true }),
   imdbId: z.string().nullable().meta({ example: "tt2861424" }),
   imdbRating: z.number().nullable().meta({ example: 9.1 }),
   imdbVotes: z.number().nullable().meta({ example: 640000 }),
-  key: z.string().meta({ example: "rick and morty||series" }),
-  metascore: z.number().nullable().meta({ example: 85 }),
-  poster: z
-    .string()
-    .nullable()
-    .meta({ example: "https://m.media-amazon.com/images/M/example.jpg" }),
-  rottenTomatoes: z.number().nullable().meta({ example: 94 }),
+  metascore: z.null(),
+  poster: z.null(),
+  rottenTomatoes: z.null(),
   title: z.string().meta({ example: "Rick and Morty" }),
   type: z.enum(["movie", "series", "unknown"]).meta({ example: "series" }),
   year: z.number().nullable().meta({ example: 2013 }),
@@ -42,17 +39,15 @@ const ratingSchema = z.object({
 
 // Named field by field so the response carries exactly what the schema documents, in its order.
 const asResponse = (row: Rating) => ({
-  fetchedAt: row.fetchedAt.toISOString(),
   found: row.found,
   imdbId: row.imdbId,
   imdbRating: row.imdbRating,
   imdbVotes: row.imdbVotes,
-  key: row.key,
-  metascore: row.metascore,
-  poster: row.poster,
-  rottenTomatoes: row.rottenTomatoes,
+  metascore: null,
+  poster: null,
+  rottenTomatoes: null,
   title: row.title,
-  type: row.type as "movie" | "series" | "unknown",
+  type: row.type,
   year: row.year,
 })
 
@@ -68,7 +63,7 @@ export const ratingsRouter = new Hono()
     describeRoute({
       tags: ["Ratings"],
       description:
-        "Ratings for one title (IMDb, Rotten Tomatoes, Metacritic), answered from the cache or fetched from OMDb and cached. A title OMDb does not know comes back with found=false.",
+        "The IMDb rating for one title, matched in the IMDb index (IMDb's daily datasets) by name, kind, year, and runtime; a year is required for a match. A title the index cannot match with certainty comes back with found=false: no answer rather than a wrong one.",
       ...({
         "x-codeSamples": [
           {
@@ -77,7 +72,7 @@ export const ratingsRouter = new Hono()
             source: `import { apiClient, unwrap } from "@/lib/api/client"
 
 const { data, error } = await unwrap(
-  apiClient.v1.ratings.$get({ query: { title: "Rick and Morty", type: "series" } }),
+  apiClient.v1.ratings.$get({ query: { title: "Rick and Morty", type: "series", year: 2013 } }),
 )`,
           },
         ],
@@ -92,7 +87,7 @@ const { data, error } = await unwrap(
           },
         },
         ...validationErrorResponses,
-        ...providerErrorResponses,
+        ...indexErrorResponses,
       },
     }),
     sValidator("query", titleQuerySchema, invalid),
@@ -105,7 +100,7 @@ const { data, error } = await unwrap(
     "/",
     describeRoute({
       tags: ["Ratings"],
-      description: `Ratings for a batch of titles (up to ${MAX_TITLES}), one answer per title in the order asked; what the extension calls with the cards it sees. Cached answers are served as-is, the rest are fetched from OMDb and cached.`,
+      description: `IMDb ratings for a batch of titles (up to ${MAX_TITLES}), one answer per title in the order asked; what the extension calls with the cards it sees. Every title is matched in the IMDb index in one round trip.`,
       ...({
         "x-codeSamples": [
           {
@@ -115,7 +110,7 @@ const { data, error } = await unwrap(
 
 const { data, error } = await unwrap(
   apiClient.v1.ratings.$post({
-    json: { titles: [{ title: "Rick and Morty", type: "series" }, { title: "Ikka" }] },
+    json: { titles: [{ title: "Rick and Morty", type: "series", year: 2013 }, { title: "Ikka", year: 2026 }] },
   }),
 )`,
           },
@@ -131,7 +126,7 @@ const { data, error } = await unwrap(
           },
         },
         ...validationErrorResponses,
-        ...providerErrorResponses,
+        ...indexErrorResponses,
       },
     }),
     sValidator("json", batchSchema, invalid),

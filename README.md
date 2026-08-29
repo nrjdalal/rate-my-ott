@@ -1,19 +1,19 @@
 # Rate My OTT
 
-> IMDb, Rotten Tomatoes, and Metacritic ratings on every title while you browse Netflix, with more streaming platforms to come.
+> IMDb ratings on every title while you browse Netflix, with more streaming platforms to come.
 
-A browser extension plus the small API behind it, built on [ZeroStarter](https://zerostarter.dev). The extension reads the titles Netflix renders, asks the Ratings API in batches, and paints an IMDb badge on every card and a ratings row in the title modal. The API answers from a Postgres cache and asks [OMDb](https://www.omdbapi.com) only for titles it has not seen.
+A browser extension plus the small API behind it, built on [ZeroStarter](https://zerostarter.dev). The extension reads the titles Netflix renders, asks the Ratings API in batches, and paints an IMDb badge on every card and an "IMDb:" row in the title modal's details. The API answers from its own IMDb index: IMDb's daily datasets, imported into Postgres every night, matched by name, kind, year, and runtime.
 
 ## Monorepo structure
 
 ```
 .
-├── api/hono/        # Ratings API (Hono): POST /api/v1/ratings over a Postgres cache, OMDb behind it; Scalar reference at /api/docs
+├── api/hono/        # Ratings API (Hono): POST /api/v1/ratings over the IMDb index, plus the sync job that builds it; Scalar reference at /api/docs
 ├── extension/wxt/   # Browser extension (WXT + React): Netflix content script, background worker, popup, options page
 ├── web/next/        # Website (Next.js App Router): landing page + MDX docs
 └── packages/
     ├── config/      # site.ts (brand identity + feature flags), TS/tsdown bases
-    ├── db/          # Drizzle schema (the `rating` table) + migrations
+    ├── db/          # Drizzle schema (the `imdb_title` and `imdb_name` index tables) + migrations
     └── env/         # Type-safe env, one validated entry per consumer
 ```
 
@@ -22,12 +22,10 @@ Types flow from the API to both clients: the extension and the web app call it t
 ## Quick start
 
 ```bash
-# 1. an OMDb key (https://www.omdbapi.com/apikey.aspx) in the repo-root .env
-OMDB_API_KEY=your-key
-
-# 2. install, migrate (POSTGRES_URL is set by `zerostarter init`, or set it yourself), run
+# install, migrate (POSTGRES_URL is set by `zerostarter init`, or set it yourself), build the IMDb index, run
 bun install
 bun run db:migrate
+bun run imdb:sync   # ~235 MB from IMDb, under a minute
 bun run dev
 ```
 
@@ -47,6 +45,7 @@ bun run dev
 | `bun run db:generate`             | Generate a Drizzle migration from the schema                    |
 | `bun run db:migrate`              | Apply pending migrations                                        |
 | `bun run db:studio`               | Open Drizzle Studio                                             |
+| `bun run imdb:sync`               | Rebuild the IMDb index from IMDb's daily datasets               |
 | `bun run shadcn:update`           | Update shadcn/ui components                                     |
 | `cd extension/wxt && bun run zip` | Pack the extension for the store                                |
 
@@ -56,9 +55,9 @@ Promoting `canary` to `main` cuts a release (changelog, version bump, GitHub rel
 
 ## Deployment
 
-Live at [rate-my-ott.vercel.app](https://rate-my-ott.vercel.app) with the API at [api-rate-my-ott.vercel.app](https://api-rate-my-ott.vercel.app) (Vercel, one Neon Postgres). `main` deploys production, `canary` deploys previews, and the API build applies pending migrations on both. The web app and the API deploy like any ZeroStarter fork: two Vercel projects sharing one Postgres (the API runs pending migrations on deploy), or `docker compose up --build` for both. Set `WXT_PUBLIC_API_URL` to the deployed API origin before `bun run build` so the extension is granted that host and calls it by default.
+Live at [rate-my-ott.vercel.app](https://rate-my-ott.vercel.app) with the API at [api-rate-my-ott.vercel.app](https://api-rate-my-ott.vercel.app) (Vercel, one Neon Postgres). `main` deploys production, `canary` deploys previews, the API build applies pending migrations on both, and the `auto-imdb-sync` workflow refreshes the index nightly. The web app and the API deploy like any ZeroStarter fork: two Vercel projects sharing one Postgres (the API runs pending migrations on deploy), or `docker compose up --build` for both. Set `WXT_PUBLIC_API_URL` to the deployed API origin before `bun run build` so the extension is granted that host and calls it by default.
 
-Ratings data is from OMDb under CC BY-NC 4.0, which suits a personal build; a commercial release needs a paid OMDb tier or another provider behind `api/hono/src/lib/omdb.ts`.
+Ratings are from [IMDb's datasets](https://developer.imdb.com/non-commercial-datasets/), free for personal and non-commercial use ("Information courtesy of IMDb. Used with permission."); a commercial release needs a licensing agreement with IMDb.
 
 ## License
 

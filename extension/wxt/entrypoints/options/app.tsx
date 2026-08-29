@@ -2,7 +2,6 @@ import { site } from "@packages/config/site"
 import { useState } from "react"
 import { browser } from "wxt/browser"
 
-import { SwitchRow } from "@/components/switch-row"
 import { useSettings } from "@/components/use-settings"
 import type { HealthReply, Message } from "@/utils/messages"
 import { DEFAULT_SETTINGS } from "@/utils/settings"
@@ -93,26 +92,6 @@ export function App() {
               )}
               {probe.state === "failed" && <span className="text-red-600">{probe.message}</span>}
             </p>
-          </section>
-
-          <section aria-labelledby="display" className="flex flex-col">
-            <h2 id="display" className="mb-1 text-sm font-semibold">
-              Display
-            </h2>
-            <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
-              <SwitchRow
-                label="Rotten Tomatoes"
-                description="Show the Tomatometer beside the IMDb score"
-                checked={current.showRottenTomatoes}
-                onChange={(showRottenTomatoes) => update({ showRottenTomatoes })}
-              />
-              <SwitchRow
-                label="Metacritic"
-                description="Show the Metascore beside the IMDb score"
-                checked={current.showMetascore}
-                onChange={(showMetascore) => update({ showMetascore })}
-              />
-            </div>
           </section>
 
           <button

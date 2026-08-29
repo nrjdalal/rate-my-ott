@@ -4,18 +4,17 @@
   position: relative;
 }
 
-/* One label per card, hanging from the top edge of the artwork, centered: the mirror of Netflix's own "Recently added" label at the bottom, so it is flush with the edge, square on top and rounded below. Partitioned by platform: yellow is IMDb, red is Rotten Tomatoes, green is Metacritic, and a missing score simply drops its partition, so a card reads ( 6.6 | 80 | 63 ), ( 6.6 | 80 ), or ( 6.6 ). Numbers only; the color is the label. Each partition is a tinted fill of its hue over a dark base with the number in the hue, the way a status badge reads, and the label is pointer-transparent so the card underneath still hovers and clicks. */
+/* One label per card, hanging from the top edge of the artwork at its right, a little in from the corner: the counterpart of Netflix's own "Recently added" label at the bottom left, so it is flush with the top edge, square on top and rounded below. Partitioned by platform, one partition per score, so it can grow when another platform joins: yellow is IMDb, and a card reads ( 6.6 ). Numbers only; the color is the label. Each partition is a tinted fill of its hue over a dark base with the number in the hue, the way a status badge reads, and the label is pointer-transparent so the card underneath still hovers and clicks. */
 .rmo-badge {
   backdrop-filter: blur(6px);
   background: rgba(18, 18, 18, 0.72);
   border-radius: 0 0 6px 6px;
   display: inline-flex;
-  left: 50%;
   overflow: hidden;
   pointer-events: none;
   position: absolute;
+  right: 8px;
   top: 0;
-  transform: translateX(-50%);
   z-index: 5;
 }
 
@@ -41,67 +40,4 @@
   color: #f5c518;
 }
 
-.rmo-score--rt {
-  background: rgba(250, 50, 10, 0.22);
-  color: #ff7a5c;
-}
-
-.rmo-score--mc {
-  background: rgba(102, 204, 51, 0.18);
-  color: #8ee05a;
-}
-
-/* The modal's ratings row: real pills after the metadata line, in the same three colors. */
-.rmo-panel {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 12px 0 0;
-}
-
-.rmo-pill {
-  align-items: center;
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-  color: #fff;
-  display: inline-flex;
-  font-size: 14px;
-  font-weight: 600;
-  gap: 6px;
-  line-height: 1.2;
-  padding: 5px 11px;
-  text-decoration: none;
-}
-
-.rmo-pill--imdb {
-  background: rgba(245, 197, 24, 0.16);
-  border: 1px solid rgba(245, 197, 24, 0.45);
-  color: #f5c518;
-}
-
-.rmo-pill--imdb:hover {
-  background: rgba(245, 197, 24, 0.28);
-}
-
-.rmo-pill--rt {
-  background: rgba(250, 50, 10, 0.18);
-  border: 1px solid rgba(250, 50, 10, 0.5);
-  color: #ff7a5c;
-}
-
-.rmo-pill--mc {
-  background: rgba(102, 204, 51, 0.16);
-  border: 1px solid rgba(102, 204, 51, 0.45);
-  color: #8ee05a;
-}
-
-.rmo-pill--muted {
-  color: rgba(255, 255, 255, 0.65);
-  font-weight: 500;
-}
-
-.rmo-pill small {
-  font-size: 12px;
-  font-weight: 400;
-  opacity: 0.75;
-}
+/* The modal's rating is one more row of Netflix's own details column and borrows its classes (previewModal--tags, tag-item), so it needs no style of its own; .rmo-panel only marks the row as ours. */
