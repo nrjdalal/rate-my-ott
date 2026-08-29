@@ -8,8 +8,9 @@ import { settings } from "@/utils/settings"
 
 // The only context that talks to the API: it holds the host permission that lets a cross-origin call skip CORS, and one place to batch and cache keeps every Netflix tab from asking twice.
 
-// What the API answers, remembered for the browser session (session storage survives service-worker restarts and clears when the browser closes, so it cannot grow across sessions); the API itself answers from its index every time.
-const CACHE_TTL_MS = 12 * 60 * 60 * 1000
+// What the API answers, remembered for the browser session (session storage survives service-worker restarts and clears when the browser closes, so it cannot grow across sessions); the API itself answers from its index every time. A miss is remembered briefly: the index is rebuilt nightly and a title can appear in it, and a lookup is cheap now that no quota stands behind it.
+const FOUND_TTL_MS = 12 * 60 * 60 * 1000
+const MISS_TTL_MS = 10 * 60 * 1000
 const BATCH = 50
 
 type Cached = { at: number; rating: Rating }
@@ -25,7 +26,9 @@ async function lookup(titles: TitleQuery[]): Promise<LookupReply> {
   const now = Date.now()
   const cached = (await storage.getItems(keys)) as { key: string; value: Cached | null }[]
   const ratings: (Rating | null)[] = cached.map(({ value }) =>
-    value && now - value.at < CACHE_TTL_MS ? value.rating : null,
+    value && now - value.at < (value.rating.found ? FOUND_TTL_MS : MISS_TTL_MS)
+      ? value.rating
+      : null,
   )
   const missing = titles
     .map((title, index) => ({ index, title }))
