@@ -18,7 +18,7 @@ Two reasons this is a hard stop rather than a courtesy. A shape is cheap to argu
 
 - Schema files group by concern, not one per table. A new table joins the file for its concern, or starts a new one when it is a new concern, and that file needs an export from `index.ts`: `export * from "@/schema/<name>"`. Miss that export and the table never reaches a migration.
 - Conventions: `text` primary keys (`.$defaultFn(() => crypto.randomUUID())`), `timestamp("created_at").defaultNow().notNull()`, snake_case columns, `onDelete: "cascade"` on FKs, and an `index()` on every FK column. Both bend for the same kind of column: use `onDelete: "set null"` when the row outlives the reference and the column is only provenance, and skip the index when nothing queries by it and the table is small enough that the delete-time scan is free. Index a FK when a query narrows on the column itself, or when the table is large enough for the sweep to matter. When a `set null` column is the only record of who acted, store the readable text beside it so a row does not become anonymous.
-- Keep column definitions A→Z inside a table, with `id` in its alphabetical place; a unique natural key gets a `uniqueIndex`, and an upsert targets it with `onConflictDoUpdate`.
+- Keep column definitions A→Z inside a table, with `id` in its alphabetical place; a unique natural key gets `.unique()`, and an upsert targets it with `onConflictDoUpdate`. `ratings.ts` (the `rating` cache table) is the worked example.
 
 ## 2. Generate and review
 

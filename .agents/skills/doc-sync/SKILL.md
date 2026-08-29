@@ -4,9 +4,6 @@ description: Sync docs and skills so they never drift from the code. Use before 
 source: https://github.com/nrjdalal/zerostarter
 ---
 
-> [!CAUTION]
-> Synced from https://github.com/nrjdalal/zerostarter. Customize this skill or remove this note to stop syncing.
-
 # Doc Sync
 
 A change ships with its docs or it ships drift. This is the procedure that catches drift across every hand-authored surface before the PR goes up: `AGENTS.md` makes the sync mandatory, this makes it checkable.
@@ -17,7 +14,7 @@ Hand-authored, keep each in step with the code:
 
 | Surface | Documents | Drifts when |
 | --- | --- | --- |
-| `web/next/content/docs/**.mdx` | concepts and how-to (getting-started, deployment, manage, resources) | a feature, convention, API, command, script, or env var it describes changes |
+| `web/next/content/docs/**.mdx` | concepts and how-to (install, the Ratings API) | a feature, convention, API, command, script, or env var it describes changes |
 | `web/next/docs.config.ts` | the docs nav and page registry, the single source the sidebar, `meta.json`, and MDX frontmatter all derive from | a doc page is added, removed, renamed, or re-slugged |
 | `README.md` | top-level story: stack, structure, quick start, scripts, deployment | the stack, setup, scripts, or pitch changes |
 | `.agents/skills/<name>/SKILL.md` | one task procedure each (canonical; `.claude` and `.github` symlink in) | a command, path, convention, or tooling a skill encodes changes, or a skill is added or removed |
@@ -41,7 +38,7 @@ rg -n "<changed-path-or-command>" web/next/content/docs README.md AGENTS.md .age
 
 Fix each hit in the same change. Two couplings are easy to miss:
 
-- **Adding or removing a skill** touches three places: the `AGENTS.md` skills table, the `resources/ai-skills.mdx` catalog row, and that file's "N skills" counts.
+- **Adding or removing a skill** regenerates the `AGENTS.md` skills table (`bun .github/scripts/skills-manager.ts`, which the pre-commit hook also runs).
 - **Adding, removing, or renaming a doc page** touches `web/next/docs.config.ts`, not the `.mdx` alone.
 
 ## 4. Verify with the repo's own drift gate

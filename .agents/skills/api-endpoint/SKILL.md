@@ -6,7 +6,7 @@ source: https://github.com/nrjdalal/zerostarter
 
 # API Endpoint
 
-Every response is an envelope: `{ data }` on success, `{ error: { code, message } }` on failure. Never hand-build the failure envelope, throw `ApiError` and let `errorHandler` (`api/hono/src/lib/error.ts`) shape it in ONE place. OpenAPI comes from `hono-openapi`, end-to-end types from Hono RPC. The reference routes are `/api/health` and `/api/health/ws` in `api/hono/src/index.ts`; app routes live in `api/hono/src/routers/v1.ts` (mounted at `/api/v1`), and a distinct concern gets its own router beside it.
+Every response is an envelope: `{ data }` on success, `{ error: { code, message } }` on failure. Never hand-build the failure envelope, throw `ApiError` and let `errorHandler` (`api/hono/src/lib/error.ts`) shape it in ONE place. OpenAPI comes from `hono-openapi`, end-to-end types from Hono RPC. The reference router is `api/hono/src/routers/ratings.ts` (a validated GET and POST over a cache); `/api/health` and `/api/health/ws` in `api/hono/src/index.ts` are the minimal ones. App routers mount under `v1.ts` (`/api/v1`), one router per concern.
 
 ## 1. Create the router
 
@@ -55,8 +55,8 @@ export const exampleRouter = new Hono().post(
 )
 ```
 
-- Spread the matching error-response set into `responses` so its shape shows in the Scalar docs: `...validationErrorResponses` (400) for a validated route, `...notFoundErrorResponses` (404) for one addressing a row by id, and `...conflictErrorResponses` (409) for one that can lose a race to a unique constraint or to a concurrent edit. 429 and 500 are added globally in `index.ts`, so never per route.
-- Mirror `/api/health`'s `x-codeSamples` block so Scalar shows the `hono/client` usage (the template above omits it).
+- Spread the matching error-response set into `responses` so its shape shows in the Scalar docs: `...validationErrorResponses` (400) for a validated route, `...notFoundErrorResponses` (404) for one addressing a row by id, `...conflictErrorResponses` (409) for one that can lose a race to a unique constraint or to a concurrent edit, and `...providerErrorResponses` (502/503) for one that asks a third-party provider. 429 and 500 are added globally in `index.ts`, so never per route.
+- Mirror `ratings.ts`'s `x-codeSamples` block so Scalar shows the `hono/client` usage (the template above omits it).
 - A route the browser calls with a method other than GET or POST needs that method in the `cors()` `allowMethods` list in `index.ts`, and in the OpenAPI `defaultOptions` beside it, or the preflight fails and the request never leaves the page while its 429 and 500 go undocumented. curl will not catch the preflight.
 - Response schemas order by relevance first, then A→Z: the key the response is about leads (`ratings`, `users`), the fields describing it sort after.
 - A feature-flagged surface mounts `requireFeature("<flag>")` from `@/middlewares` with `.use()` so the route stays in `AppType` and 404s while the flag is off.

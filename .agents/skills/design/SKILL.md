@@ -63,6 +63,11 @@ When a change establishes or alters a convention, update this file in the same c
 - **Icons:** `@remixicon/react` only. `size-4` inside buttons by default.
 - **shadcn (`components/ui/*`):** customize only via `.github/scripts/shadcn-customize.ts` (the sync wipes and re-scaffolds `ui/`). Extend the primitive in place; do not fork a copy.
 
+## Extension surfaces
+
+- The popup and options page (`extension/wxt/entrypoints/*`) use Tailwind utilities and the small primitives in `extension/wxt/components/`; no shadcn there, since the extension is not a Next app and its two screens do not warrant the sync. Neutral grays plus the `imdb` token (`--color-imdb`, IMDb yellow) for the one accent; light and dark via `dark:`.
+- Anything painted onto netflix.com lives in `extension/wxt/assets/netflix.css`: every class prefixed `rmo-`, each rule setting only what it needs, no reset and no Tailwind, so nothing restyles the page. The badge is `pointer-events: none` and absolutely placed on the artwork; the modal row is real pills after the metadata row.
+
 ## File and export naming
 
 - Components are grouped by domain folder (`common/`, `shell/`, `docs/`, `ui/`), with kebab-case file names. A single-component file's basename matches its export; a multi-export slot file is named `<area>/sidebar.tsx` and its exports follow the sidebar-slot rule below. `docs/` holds one of each (`docs/sidebar.tsx` + `docs/copy-as-markdown.tsx`). A cross-domain family follows the shadcn single-module pattern as one top-level file whose exports share the family prefix.
