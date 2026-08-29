@@ -68,11 +68,35 @@ export function readCard(card: Element): CardInfo | null {
 }
 
 // The year, kind, and length the MAIN-world script stamped on a card, when it found them.
-export function stampedMeta(card: Element): {
-  runtime?: number
-  type?: "movie" | "series"
-  year?: number
-} {
+export type Meta = { runtime?: number; type?: "movie" | "series"; year?: number }
+
+// What a tab has learned about a Netflix video id from any surface that stated it: a home-row card states a film's runtime, a hovered preview its length as "2h 17m", while a genre page's legacy card states neither, and the same title is one id everywhere. Learning only fills what is missing, and recalling lets the surface's own statements win, so a stale or recycled stamp never overrides what a card says for itself.
+export const learn = (known: Map<string, Meta>, id: string, meta: Meta): void => {
+  const had = known.get(id) ?? {}
+  const merged: Meta = {
+    ...((had.runtime ?? meta.runtime) ? { runtime: had.runtime ?? meta.runtime } : {}),
+    ...((had.type ?? meta.type) ? { type: had.type ?? meta.type } : {}),
+    ...((had.year ?? meta.year) ? { year: had.year ?? meta.year } : {}),
+  }
+  if (Object.keys(merged).length > 0) known.set(id, merged)
+}
+
+// What a query states, as meta to learn: the runtime, kind, and year, when they are numbers and kinds.
+export const metaOf = (query: TitleQuery): Meta => ({
+  ...(typeof query.runtime === "number" && query.runtime > 0 ? { runtime: query.runtime } : {}),
+  ...(query.type === "movie" || query.type === "series" ? { type: query.type } : {}),
+  ...(typeof query.year === "number" && query.year > 0 ? { year: query.year } : {}),
+})
+
+export const recall = (known: Map<string, Meta>, id: string, own: Meta): Meta => {
+  const had = known.get(id) ?? {}
+  const runtime = own.runtime ?? had.runtime
+  const type = own.type ?? had.type
+  const year = own.year ?? had.year
+  return { ...(runtime ? { runtime } : {}), ...(type ? { type } : {}), ...(year ? { year } : {}) }
+}
+
+export function stampedMeta(card: Element): Meta {
   const runtime = Number(card.getAttribute("data-rmo-runtime")) || undefined
   const year = Number(card.getAttribute("data-rmo-year")) || undefined
   const kind = card.getAttribute("data-rmo-type")
@@ -153,7 +177,13 @@ export function renderBadge(
 }
 
 // Where a modal's rating goes: the detail modal's details column as an "IMDb:" row, the hover modal's metadata line as an item beside the duration.
-export type ModalInfo = { anchor: HTMLElement; kind: "details" | "line"; query: TitleQuery }
+export type ModalInfo = {
+  anchor: HTMLElement
+  // The Netflix video id the modal's stamp names, when it does, so what the modal states (a length from "2h 17m") can be learned for the title's cards.
+  id?: string
+  kind: "details" | "line"
+  query: TitleQuery
+}
 
 // The title the open modal is about. Netflix renders titles as artwork, so it is read from where the page still spells it out: the ?jbv=<id> the modal puts in the URL names the card it opened from, whose aria-label is the title; failing that, the modal's own boxart or story art carries it as alt text, and the legacy logo image did too.
 // The card the open modal came from: the ?jbv=<id> in the URL names it.
@@ -221,6 +251,7 @@ function readOneModal(root: ParentNode, modal: HTMLElement): ModalInfo | null {
   const runtime = stamped.runtime ?? (type === "movie" ? parsedRuntime : undefined)
   return {
     anchor,
+    ...(id ? { id } : {}),
     kind: details ? "details" : "line",
     query: {
       title,

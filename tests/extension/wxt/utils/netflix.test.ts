@@ -12,6 +12,9 @@ import {
   readCard,
   readModal,
   readModals,
+  recall,
+  learn,
+  metaOf,
   removeAll,
   renderBadge,
   renderBillboardRating,
@@ -289,6 +292,24 @@ describe("the hover preview", () => {
   })
 })
 
+describe("learn and recall", () => {
+  test("a tab learns what any surface states about a video id, fills only what is missing, and lets a surface's own statements win", () => {
+    const known = new Map()
+    learn(known, "81000001", { type: "movie", year: 2026 })
+    learn(known, "81000001", metaOf({ runtime: 143, title: "Blast", year: 2025 }))
+    expect(known.get("81000001")).toEqual({ runtime: 143, type: "movie", year: 2026 })
+    // A legacy card that states no runtime gets the one a hovered preview stated; its own year stands.
+    expect(recall(known, "81000001", { type: "movie", year: 2025 })).toEqual({
+      runtime: 143,
+      type: "movie",
+      year: 2025,
+    })
+    expect(recall(known, "81000002", { year: 2020 })).toEqual({ year: 2020 })
+    learn(known, "81000002", metaOf({ title: "Nothing stated" }))
+    expect(known.has("81000002")).toBe(false)
+  })
+})
+
 describe("readModals", () => {
   test("reads every open preview, and a legacy preview stamped without a title from the card it hovers over", () => {
     const doc = page(`
@@ -303,6 +324,7 @@ describe("readModals", () => {
       { title: "Bleach", type: "series", year: 2022 },
     ])
     expect(modals.every((modal) => modal.kind === "line")).toBe(true)
+    expect(modals.map((modal) => modal.id)).toEqual(["81667463", "70204957"])
     expect(readModal(doc)?.query.title).toBe("MOURINHO")
     // A preview stamped without a title whose card is gone has nothing to be asked about.
     doc.querySelector(".title-card")?.remove()

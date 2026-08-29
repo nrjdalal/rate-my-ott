@@ -10,13 +10,17 @@ import {
   hasBillboardRating,
   STAMP,
   hasPanel,
+  learn,
+  metaOf,
   readBillboard,
   readCard,
   readModals,
+  recall,
   removeAll,
   renderBadge,
   renderBillboardRating,
   renderPanel,
+  type Meta,
 } from "@/utils/netflix"
 import { buildReport, type PaintItem } from "@/utils/report"
 import { readSettings, settings, withDefaults, type Settings } from "@/utils/settings"
@@ -40,6 +44,8 @@ export default defineContentScript({
     const answers = new Map<string, Rating | null>()
     // What the last paint saw on screen, for the popup's "why no score" list; asked for, never pushed, so the list is this tab's and current.
     let lastPaint: PaintItem[] = []
+    // What any surface has stated about a video id, for the surfaces that state less: a genre page's legacy card names no runtime, the same film's home-row card or hovered preview does.
+    const known = new Map<string, Meta>()
     const failedAt = new Map<string, number>()
     const inflight = new Set<string>()
     const pending = new Map<string, TitleQuery>()
@@ -74,12 +80,8 @@ export default defineContentScript({
             renderBadge(card, null)
             continue
           }
-          const query: TitleQuery = {
-            title: info.title,
-            ...(info.runtime ? { runtime: info.runtime } : {}),
-            ...(info.type ? { type: info.type } : {}),
-            ...(info.year ? { year: info.year } : {}),
-          }
+          learn(known, info.id, info)
+          const query: TitleQuery = { title: info.title, ...recall(known, info.id, info) }
           const rating = ask(query)
           const key = keyOf(query)
           items.push({ key, query })
@@ -98,6 +100,7 @@ export default defineContentScript({
         }
       }
       for (const modal of readModals(document)) {
+        if (modal.id) learn(known, modal.id, metaOf(modal.query))
         const rating = ask(modal.query)
         const key = keyOf(modal.query)
         items.push({ key, query: modal.query })

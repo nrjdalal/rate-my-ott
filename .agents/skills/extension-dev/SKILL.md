@@ -14,7 +14,7 @@ source: local
 | --- | --- |
 | Which Netflix nodes are titles (cards, the modal's "More Like This" cards, the hover preview, the billboard), and how a badge, the modal row, the preview's line item, and the billboard line are drawn | `utils/netflix.ts` (pure DOM functions; tested from `tests/extension/wxt/utils/netflix.test.ts` in happy-dom) |
 | A card's year, kind, and runtime, read from React's fiber props in the page's own world and stamped on the card as `data-rmo-*` | `entrypoints/netflix-entities.content.ts` (`world: "MAIN"`, no extension APIs) over `utils/netflix-props.ts` (pure; tested with a fake fiber chain) |
-| The scan loop: observe the page, batch titles, paint answers | `entrypoints/netflix.content.ts` |
+| The scan loop: observe the page, batch titles, paint answers; a per-tab memory of what any surface stated about a video id (`learn`, `recall`, `metaOf` in `utils/netflix.ts`), so a genre page's legacy card, which states no runtime, borrows the one its hovered preview or its home-row card stated | `entrypoints/netflix.content.ts` |
 | The badge and panel styles injected into netflix.com | `assets/netflix.css` (every rule prefixed `rmo-`; no Tailwind, no reset, nothing that restyles the page) |
 | The only place that talks to the API, with a session cache; also answers the popup's index status (`api:index`) and the options page's probe (`api:health`), and answers nothing about the page: the popup asks the Netflix tab itself (`page:latest`) | `entrypoints/background.ts` |
 | The popup's "why no score" list: a tab's misses grouped by the API's `reason`, phrased | `utils/report.ts` (pure; tested from `tests/extension/wxt/utils/report.test.ts`) |
