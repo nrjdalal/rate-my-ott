@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 
 import { Window } from "happy-dom"
 
-import { readEntity } from "../../../../extension/wxt/utils/netflix-props"
+import { readBillboard, readEntity } from "../../../../extension/wxt/utils/netflix-props"
 
 // A card anchor with the fiber chain React hangs on it: the card component two levels up, the row component further up, shaped like Netflix's browse page on 2026-08-29.
 const cardWithFibers = (entity: Record<string, unknown> | null, videoId = 82023350) => {
@@ -104,6 +104,109 @@ describe("readEntity", () => {
       videoId: 70155590,
     })
     expect(readEntity(legacy({ title: "X" }))).toBeNull()
+  })
+
+  // A card in the modal's "More Like This" row: no link, a video record in its props with the show's latest season as its year.
+  test("a modal card reads its video record, taking a show's latest year and a film's display runtime", () => {
+    const modalCard = (video: Record<string, unknown>) => {
+      const window = new Window({ url: "https://www.netflix.com/browse?jbv=1" })
+      window.document.body.innerHTML = `<div data-uia="titleCard--container" aria-label="Little Brother"><div class="titleCard-imageWrapper"><img alt=""></div></div>`
+      const card = window.document.querySelector("div") as unknown as Element
+      ;(card as unknown as Record<string, unknown>)["__reactFiber$m"] = {
+        memoizedProps: { role: "button" },
+        return: { memoizedProps: { video }, return: null },
+      }
+      return card
+    }
+    expect(
+      readEntity(
+        modalCard({
+          __typename: "Movie",
+          displayRuntimeSec: 6047,
+          latestYear: 2026,
+          title: "Little Brother",
+          videoId: 81521988,
+        }),
+      ),
+    ).toEqual({
+      runtime: 101,
+      title: "Little Brother",
+      type: "movie",
+      videoId: 81521988,
+      year: 2026,
+    })
+    expect(
+      readEntity(
+        modalCard({
+          __typename: "Show",
+          displayRuntimeSec: 3000,
+          latestYear: 2025,
+          title: "A Show",
+          videoId: 7,
+        }),
+      ),
+    ).toEqual({
+      title: "A Show",
+      type: "series",
+      videoId: 7,
+      year: 2025,
+    })
+    expect(readEntity(modalCard({ title: "No id" }))).toBeNull()
+  })
+
+  test("the billboard reads its play button's entity and drops the promoted season from the title", () => {
+    const window = new Window({ url: "https://www.netflix.com/browse" })
+    window.document.body.innerHTML = `<section data-uia="billboard"></section>`
+    const section = window.document.querySelector("section") as unknown as Element
+    const props = {
+      buttons: [
+        {
+          __typename: "PinotHawkinsButton",
+          onPress: {
+            __typename: "PinotEntityPlaybackAction",
+            unifiedEntity: { __typename: "Show", releaseYear: 2011, videoId: 70184207 },
+          },
+        },
+        {
+          __typename: "PinotHawkinsButton",
+          onPress: { __typename: "PinotNavigateToDisplayPageAction" },
+        },
+      ],
+      title: "Shameless (U.S.), Season 1",
+    }
+    ;(section as unknown as Record<string, unknown>)["__reactFiber$b"] = {
+      memoizedProps: {},
+      return: { memoizedProps: props, return: null },
+    }
+    expect(readBillboard(section)).toEqual({
+      title: "Shameless (U.S.)",
+      type: "series",
+      videoId: 70184207,
+      year: 2011,
+    })
+    ;(section as unknown as Record<string, unknown>)["__reactFiber$b"] = {
+      memoizedProps: { title: "X", buttons: [] },
+      return: null,
+    }
+    expect(readBillboard(section)).toBeNull()
+  })
+
+  test("the billboard drops whatever is promoted from its title: a season, a part, a limited series", () => {
+    const read = (title: string) => {
+      const window = new Window({ url: "https://www.netflix.com/browse" })
+      window.document.body.innerHTML = `<section data-uia="billboard"></section>`
+      const section = window.document.querySelector("section") as unknown as Element
+      const entity = { __typename: "Show", releaseYear: 2026, videoId: 1 }
+      ;(section as unknown as Record<string, unknown>)["__reactFiber$b"] = {
+        memoizedProps: { buttons: [{ onPress: { unifiedEntity: entity } }], title },
+        return: null,
+      }
+      return readBillboard(section)?.title
+    }
+    expect(read("HIS & HERS, Limited Series")).toBe("HIS & HERS")
+    expect(read("Stranger Things: Season 5")).toBe("Stranger Things")
+    expect(read("Money Heist, Part 3")).toBe("Money Heist")
+    expect(read("Alpha")).toBe("Alpha")
   })
 
   test("an element with no fiber, or no card above it, reads as null", () => {

@@ -18,6 +18,12 @@
   z-index: 5;
 }
 
+/* The modal's "More Like This" cards keep Netflix's duration label top-right, so the badge takes the left corner there. */
+.rmo-badge--left {
+  left: 8px;
+  right: auto;
+}
+
 .rmo-score {
   align-items: center;
   display: inline-flex;

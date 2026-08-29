@@ -16,9 +16,12 @@ export type CardInfo = {
 // The attribute the MAIN-world script sets once it has read a card's fiber; data-rmo-year and data-rmo-type sit beside it when the page named them.
 export const STAMP = "data-rmo-meta"
 
-// Every lockup a badge goes on. Netflix's current browse UI renders a card as one anchor labelled with the title and linking to /browse?jbv=<id>: standard-card (rows), ranked-card (Top 10), progress-card (Continue Watching); any other labelled jbv link is a card too. The legacy .title-card markup stays beside them for pages that still render it.
+// Every lockup a badge goes on. Netflix's current browse UI renders a card as one anchor labelled with the title and linking to /browse?jbv=<id>: standard-card (rows), ranked-card (Top 10), progress-card (Continue Watching); any other labelled jbv link is a card too. The modal's "More Like This" cards are labelled divs with no link (their id comes from the stamp). The legacy .title-card markup stays beside them for pages that still render it.
 export const CARD_SELECTOR =
-  "a[data-uia='standard-card'], a[data-uia='ranked-card'], a[data-uia='progress-card'], a[aria-label][href*='jbv='], .title-card, [data-uia='title-card']"
+  "a[data-uia='standard-card'], a[data-uia='ranked-card'], a[data-uia='progress-card'], a[aria-label][href*='jbv='], [data-uia='titleCard--container'][aria-label], .title-card, [data-uia='title-card']"
+
+// The hero at the top of a browse page; its rating joins the metadata line under the logo.
+export const BILLBOARD_SELECTOR = "[data-uia='billboard']"
 
 // The hover and detail modals share one container class; the detail one adds `detail-modal`.
 export const MODAL_SELECTOR = ".previewModal--container"
@@ -31,13 +34,14 @@ export const findCards = (root: ParentNode): Element[] => [...root.querySelector
 const text = (node: Element | null | undefined): string | undefined =>
   node?.textContent?.replace(/\s+/g, " ").trim() || undefined
 
-// The title as Netflix labels it for screen readers first (the card anchor's aria-label; the card is the anchor in the current UI), then the fallback text the legacy card renders under artwork that failed to load, then its title node; a card with none of them (a logo-only promo) is skipped. The Netflix video id in the href (jbv= today, /watch/ or /title/ before) is the card's identity, since the same title can appear in several rows.
+// The title as Netflix labels it for screen readers first (the card's own aria-label: the card is the anchor in the current UI, a labelled div in the modal's "More Like This" row; the legacy card labels its inner anchor), then the fallback text the legacy card renders under artwork that failed to load, then its title node; a card with none of them (a logo-only promo) is skipped. The Netflix video id in the href (jbv= today, /watch/ or /title/ before) is the card's identity, since the same title can appear in several rows.
 export function readCard(card: Element): CardInfo | null {
   const anchor = card.matches("a[href]")
     ? (card as HTMLAnchorElement)
     : (card.querySelector<HTMLAnchorElement>("a.slider-refocus") ??
       card.querySelector<HTMLAnchorElement>("a[href]"))
   const title =
+    card.getAttribute("aria-label")?.trim() ||
     anchor?.getAttribute("aria-label")?.trim() ||
     text(card.querySelector(".fallback-text")) ||
     text(card.querySelector("[data-uia='title-card-title']"))
@@ -45,10 +49,11 @@ export function readCard(card: Element): CardInfo | null {
   const href = anchor?.getAttribute("href") ?? ""
   const match = href.match(/(?:\/watch\/|\/title\/|[?&]jbv=)(\d+)/)
   const stamped = card.hasAttribute(STAMP)
+  const stampedId = card.getAttribute("data-rmo-id")
   return {
-    id: match ? (match[1] as string) : title,
-    // Any card the page identifies (a jbv or /watch/ link) gets a stamp from its React props; only a bare label has nothing to wait for.
-    pending: !stamped && match !== null,
+    id: stampedId ?? (match ? (match[1] as string) : title),
+    // Any card the page identifies (a jbv or /watch/ link, or a labelled modal card) gets a stamp from its React props; only a bare label has nothing to wait for.
+    pending: !stamped && (match !== null || card.matches("[data-uia='titleCard--container']")),
     title,
     ...stampedMeta(card),
   }
@@ -69,7 +74,9 @@ export function stampedMeta(card: Element): {
 
 // Where the badge sits: the artwork box, so an absolutely placed badge lands on the art rather than in the card's flow. The legacy card names it (.boxart-container); the current card is an anchor whose artwork is an <img> in a plain wrapper div, which is the box there (a ranked card puts its rank numeral in a sibling div, so the wrapper, not the anchor, keeps the badge on the art). The card itself when there is no artwork at all.
 export const badgeHost = (card: Element): HTMLElement =>
-  card.querySelector<HTMLElement>(".boxart-container, .boxart-size-16x9, .boxart-size-7x10") ??
+  card.querySelector<HTMLElement>(
+    ".boxart-container, .boxart-size-16x9, .boxart-size-7x10, .titleCard-imageWrapper",
+  ) ??
   card.querySelector("img")?.parentElement ??
   (card as HTMLElement)
 
@@ -111,7 +118,8 @@ export function renderBadge(card: Element, rating: Rating | null): void {
   const parts = scores(host.ownerDocument, rating)
   if (parts.length === 0) return
   const badge = host.ownerDocument.createElement("span")
-  badge.className = BADGE
+  // Netflix's own duration label sits top-right on the modal's cards; the badge takes the other corner there.
+  badge.className = host.querySelector(".duration") ? `${BADGE} ${BADGE}--left` : BADGE
   badge.append(...parts)
   ensurePositioned(host)
   host.append(badge)
@@ -206,6 +214,48 @@ export function renderPanel(anchor: HTMLElement, rating: Rating | null): void {
   }
   row.append(label, item)
   anchor.append(row)
+}
+
+export type BillboardInfo = { anchor: HTMLElement; query: TitleQuery }
+
+// The stamped billboard, if any: the title, year, and kind the MAIN-world script read from its props (the title is artwork in the markup), and the metadata line ("Series • Drama • 2011 • 11 Seasons • A") its rating joins.
+export function readBillboard(root: ParentNode): BillboardInfo | null {
+  const section = root.querySelector<HTMLElement>(`${BILLBOARD_SELECTOR}[${STAMP}]`)
+  const title = section?.getAttribute("data-rmo-title")?.trim()
+  const line = section?.querySelector<HTMLElement>("[data-uia='attributes-elements']")
+  if (!section || !title || !line) return null
+  const meta = stampedMeta(section)
+  return {
+    anchor: line,
+    query: {
+      title,
+      ...(meta.type ? { type: meta.type } : {}),
+      ...(meta.year ? { year: meta.year } : {}),
+    },
+  }
+}
+
+export const hasBillboardRating = (anchor: HTMLElement): boolean =>
+  anchor.querySelector(`:scope > .${PANEL}`) !== null
+
+// The billboard's rating as two more items of its metadata line, cloned from the line's own separator and item so they read as Netflix's: "• IMDb 8.5". Nothing for a miss. Idempotent like the badge.
+export function renderBillboardRating(anchor: HTMLElement, rating: Rating | null): void {
+  for (const node of anchor.querySelectorAll(`:scope > .${PANEL}`)) node.remove()
+  if (!rating || !rating.found || rating.imdbRating === null) return
+  const items = [...anchor.children]
+  const separator = items.find((node) => node.getAttribute("aria-hidden") === "true")
+  const item = [...items].reverse().find((node) => node.getAttribute("aria-hidden") !== "true")
+  if (!item) return
+  const dot = (separator ?? item).cloneNode(true) as HTMLElement
+  const score = item.cloneNode(false) as HTMLElement
+  dot.classList.add(PANEL)
+  score.classList.add(PANEL)
+  score.textContent = `IMDb ${oneDecimal(rating.imdbRating)}`
+  score.setAttribute(
+    "title",
+    rating.imdbVotes !== null ? `${compactCount(rating.imdbVotes)} votes on IMDb` : "IMDb",
+  )
+  anchor.append(dot, score)
 }
 
 export function removeAll(root: ParentNode): void {

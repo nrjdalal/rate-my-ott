@@ -34,6 +34,33 @@ const entityOf = (edge: unknown): Record<string, unknown> | null => {
   return edge.node.unifiedEntity
 }
 
+// The kind a video record states (a legacy videoModel, or the video of a card in the modal's "More Like This" row), its year (a show's latest season), and a film's length in minutes from its seconds (a show's runtime is 0 or an episode's, not a length worth matching on).
+function fromVideo(video: Record<string, unknown>): Entity | null {
+  if (typeof video.videoId !== "number") return null
+  const type =
+    video.__typename === "Movie" ? "movie" : video.__typename === "Show" ? "series" : undefined
+  const year =
+    typeof video.releaseYear === "number"
+      ? video.releaseYear
+      : typeof video.latestYear === "number"
+        ? video.latestYear
+        : undefined
+  const seconds =
+    typeof video.runtimeSec === "number"
+      ? video.runtimeSec
+      : typeof video.displayRuntimeSec === "number"
+        ? video.displayRuntimeSec
+        : undefined
+  const runtime = type === "movie" && seconds ? Math.round(seconds / 60) : undefined
+  return {
+    title: typeof video.title === "string" ? video.title : "",
+    videoId: video.videoId,
+    ...(runtime ? { runtime } : {}),
+    ...(type ? { type } : {}),
+    ...(year ? { year } : {}),
+  }
+}
+
 // The kind a legacy videoModel states, and a film's length in minutes from its seconds (a show's runtime is 0 or an episode's, not a length worth matching on).
 function fromVideoModel(model: Record<string, unknown>): Entity | null {
   const summary = isRecord(model.summary) ? model.summary : undefined
@@ -82,6 +109,10 @@ export function readEntity(card: Element, maxDepth = 40): Entity | null {
         const legacy = fromVideoModel(props.videoModel)
         if (legacy && owns(legacy.videoId)) return legacy
       }
+      if (isRecord(props.video)) {
+        const similar = fromVideo(props.video)
+        if (similar && owns(similar.videoId)) return similar
+      }
       if (videoId === undefined && typeof props.videoId === "number" && owns(props.videoId)) {
         videoId = props.videoId
         if (typeof props.title === "string") title = props.title
@@ -108,4 +139,26 @@ export function readEntity(card: Element, maxDepth = 40): Entity | null {
     ...(type ? { type } : {}),
     ...(year ? { year } : {}),
   }
+}
+
+// The billboard (the hero at the top of a browse page) names its title only as a logo image, but its props carry the play button's entity { videoId, __typename, releaseYear } and a title string such as "Shameless (U.S.), Season 1" or "His & Hers, Limited Series", whose suffix names what is promoted, not the show. Null when the section has no fiber or no such props above it.
+const PROMOTED_SUFFIX = /[,:]\s*(?:Season|Part|Volume|Chapter)\s+\d+$|,\s*Limited Series$/i
+
+export function readBillboard(section: Element, maxDepth = 30): Entity | null {
+  let fiber = fiberOf(section)
+  for (let depth = 0; fiber && depth < maxDepth; depth += 1) {
+    const props = fiber.memoizedProps
+    if (isRecord(props) && typeof props.title === "string" && Array.isArray(props.buttons)) {
+      for (const button of props.buttons) {
+        const press = isRecord(button) && isRecord(button.onPress) ? button.onPress : undefined
+        const entity = press && isRecord(press.unifiedEntity) ? press.unifiedEntity : undefined
+        if (entity && typeof entity.videoId === "number") {
+          const read = fromVideo(entity)
+          if (read) return { ...read, title: props.title.replace(PROMOTED_SUFFIX, "").trim() }
+        }
+      }
+    }
+    fiber = fiber.return ?? null
+  }
+  return null
 }

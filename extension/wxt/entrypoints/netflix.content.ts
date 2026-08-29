@@ -7,12 +7,15 @@ import type { LookupReply, Message } from "@/utils/messages"
 import {
   findCards,
   hasBadge,
+  hasBillboardRating,
   STAMP,
   hasPanel,
+  readBillboard,
   readCard,
   readModal,
   removeAll,
   renderBadge,
+  renderBillboardRating,
   renderPanel,
 } from "@/utils/netflix"
 import { DEFAULT_SETTINGS, settings, type Settings } from "@/utils/settings"
@@ -67,6 +70,13 @@ export default defineContentScript({
             ...(info.year ? { year: info.year } : {}),
           })
           if (rating !== undefined && !hasBadge(card)) renderBadge(card, rating)
+        }
+      }
+      const billboard = readBillboard(document)
+      if (billboard && billboard.query.year) {
+        const rating = ask(billboard.query)
+        if (rating !== undefined && !hasBillboardRating(billboard.anchor)) {
+          renderBillboardRating(billboard.anchor, rating)
         }
       }
       const modal = readModal(document)

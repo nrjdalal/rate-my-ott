@@ -1,7 +1,7 @@
 import { defineContentScript } from "wxt/utils/define-content-script"
 
-import { CARD_SELECTOR, STAMP } from "@/utils/netflix"
-import { readEntity } from "@/utils/netflix-props"
+import { BILLBOARD_SELECTOR, CARD_SELECTOR, STAMP } from "@/utils/netflix"
+import { readBillboard, readEntity, type Entity } from "@/utils/netflix-props"
 
 // Runs in the page's own JS world (world: "MAIN"), where React's fiber properties are visible, and does one thing: stamp each card anchor with the year and kind Netflix fetched for it, as data attributes the isolated-world scanner (netflix.content.ts) reads. No extension API exists in this world, so the attributes are the whole interface, and nothing here touches the network or storage.
 
@@ -21,11 +21,24 @@ export default defineContentScript({
         if (card.hasAttribute(STAMP)) continue
         const entity = readEntity(card)
         if (!entity) continue
-        card.setAttribute(STAMP, "")
-        if (entity.year) card.setAttribute("data-rmo-year", String(entity.year))
-        if (entity.type) card.setAttribute("data-rmo-type", entity.type)
-        if (entity.runtime) card.setAttribute("data-rmo-runtime", String(entity.runtime))
+        mark(card, entity)
       }
+      // The billboard names its title only as artwork, so the stamp carries the title too.
+      for (const section of document.querySelectorAll(BILLBOARD_SELECTOR)) {
+        if (section.hasAttribute(STAMP)) continue
+        const entity = readBillboard(section)
+        if (!entity) continue
+        mark(section, entity)
+        section.setAttribute("data-rmo-title", entity.title)
+      }
+    }
+
+    const mark = (node: Element, entity: Entity) => {
+      node.setAttribute(STAMP, "")
+      node.setAttribute("data-rmo-id", String(entity.videoId))
+      if (entity.year) node.setAttribute("data-rmo-year", String(entity.year))
+      if (entity.type) node.setAttribute("data-rmo-type", entity.type)
+      if (entity.runtime) node.setAttribute("data-rmo-runtime", String(entity.runtime))
     }
 
     const schedule = () => {

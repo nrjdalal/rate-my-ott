@@ -6,11 +6,14 @@ import type { Rating } from "../../../../extension/wxt/utils/api"
 import {
   findCards,
   hasBadge,
+  hasBillboardRating,
   hasPanel,
+  readBillboard,
   readCard,
   readModal,
   removeAll,
   renderBadge,
+  renderBillboardRating,
   renderPanel,
 } from "../../../../extension/wxt/utils/netflix"
 
@@ -39,6 +42,8 @@ const MODAL = `
   <div class="previewModal--detailsMetadata-left">
     <div data-uia="videoMetadata--container" class="videoMetadata--container"><div class="year">2021</div><span class="duration">2h 35m</span></div>
     <div class="previewModal--detailsMetadata-right"><div class="previewModal--tags"><span class="previewModal--tags-label">Cast:</span><span class="tag-item"><a href="/browse/person/1">Someone</a></span></div></div>
+    <div class="titleCard--container" data-uia="titleCard--container" aria-label="Little Brother" data-rmo-meta data-rmo-id="81521988" data-rmo-year="2026" data-rmo-type="movie" data-rmo-runtime="101"><div class="titleCard-imageWrapper has-duration"><div class="ptrack-content"><img alt=""></div><div class="duration">1h 40m</div></div><div class="titleCard--metadataWrapper"><span class="year">2026</span></div></div>
+    <div class="titleCard--container" data-uia="titleCard--container" aria-label="Not Yet Stamped"><div class="titleCard-imageWrapper"><img alt=""></div></div>
   </div>
 </div>
 `
@@ -147,6 +152,39 @@ describe("renderBadge", () => {
   })
 })
 
+const BILLBOARD = `
+<section data-uia="billboard" data-rmo-meta data-rmo-id="70184207" data-rmo-title="Shameless (U.S.)" data-rmo-year="2011" data-rmo-type="series">
+  <div data-uia="billboard-title"><img alt="LOGO|abc" data-uia="billboard-logo">
+    <div data-uia="attributes-elements"><span class="e1">Series</span><p aria-hidden="true" class="sep">•</p><span class="e1">Drama</span><p aria-hidden="true" class="sep">•</p><span class="e1">2011</span></div>
+  </div>
+</section>
+`
+
+describe("readBillboard and renderBillboardRating", () => {
+  test("reads the stamped billboard and joins its metadata line in its own markup", () => {
+    const doc = page(BILLBOARD + CARDS)
+    const billboard = readBillboard(doc)
+    expect(billboard?.query).toEqual({ title: "Shameless (U.S.)", type: "series", year: 2011 })
+    expect(billboard?.anchor.getAttribute("data-uia")).toBe("attributes-elements")
+    renderBillboardRating(billboard!.anchor, rating({ imdbRating: 8.5, imdbVotes: 300000 }))
+    renderBillboardRating(billboard!.anchor, rating({ imdbRating: 8.5, imdbVotes: 300000 }))
+    const added = [...billboard!.anchor.querySelectorAll(".rmo-panel")]
+    expect(added.map((n) => n.tagName + ":" + n.textContent)).toEqual(["P:•", "SPAN:IMDb 8.5"])
+    expect(added[0]?.classList.contains("sep")).toBe(true)
+    expect(added[1]?.classList.contains("e1")).toBe(true)
+    expect(added[1]?.getAttribute("title")).toBe("300K votes on IMDb")
+    expect(hasBillboardRating(billboard!.anchor)).toBe(true)
+    renderBillboardRating(billboard!.anchor, rating({ found: false }))
+    expect(hasBillboardRating(billboard!.anchor)).toBe(false)
+    expect(billboard!.anchor.textContent).toBe("Series•Drama•2011")
+  })
+
+  test("an unstamped billboard, or one without a metadata line, is nothing to ask about", () => {
+    expect(readBillboard(page(BILLBOARD.replace(" data-rmo-meta", "")))).toBeNull()
+    expect(readBillboard(page(BILLBOARD.replace('data-uia="attributes-elements"', "")))).toBeNull()
+  })
+})
+
 describe("readModal and renderPanel", () => {
   test("reads the title, year, and kind, and inserts the ratings row after the metadata", () => {
     const doc = page(MODAL)
@@ -202,6 +240,32 @@ describe("readModal and renderPanel", () => {
     renderPanel(modal!.anchor, rating({ imdbRating: null, imdbVotes: null }))
     expect(doc.querySelector(".rmo-panel")).toBeNull()
     expect(hasPanel(modal!.anchor)).toBe(false)
+  })
+
+  test("a More Like This card is a card: stamped id, year, and kind, badge on the artwork's left corner", () => {
+    const doc = page(MODAL)
+    const cards = findCards(doc).filter(
+      (c) => c.getAttribute("data-uia") === "titleCard--container",
+    )
+    expect(cards.length).toBe(2)
+    expect(readCard(cards[0] as Element)).toEqual({
+      id: "81521988",
+      pending: false,
+      runtime: 101,
+      title: "Little Brother",
+      type: "movie",
+      year: 2026,
+    })
+    expect(readCard(cards[1] as Element)).toEqual({
+      id: "Not Yet Stamped",
+      pending: true,
+      title: "Not Yet Stamped",
+    })
+    renderBadge(cards[0] as Element, rating({ imdbRating: 6.4 }))
+    const badge = doc.querySelector(".rmo-badge")
+    expect(badge?.parentElement?.classList.contains("titleCard-imageWrapper")).toBe(true)
+    expect(badge?.className).toBe("rmo-badge rmo-badge--left")
+    expect(badge?.textContent).toBe("6.4")
   })
 
   test("removeAll clears every badge and panel", () => {
