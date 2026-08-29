@@ -60,7 +60,7 @@ while IFS= read -r url; do
   for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do agent-browser scroll down 1400 >/dev/null 2>&1; agent-browser wait 900 >/dev/null 2>&1; done
   ev "window.scrollTo(0, 0)" >/dev/null
   agent-browser wait 5000 >/dev/null 2>&1
-  cards=$(ev "JSON.stringify([...document.querySelectorAll('[data-rmo-id]')].filter((c) => !c.matches('.previewModal--container, .billboard')).map((c) => ({ badge: c.querySelector('.rmo-badge')?.textContent ?? null, id: c.getAttribute('data-rmo-id'), kind: c.getAttribute('data-rmo-type'), runtime: c.getAttribute('data-rmo-runtime'), surface: c.getAttribute('data-uia') || c.className.split(' ')[0], title: c.getAttribute('data-rmo-title') || c.getAttribute('aria-label') || '', year: c.getAttribute('data-rmo-year') })))")
+  cards=$(ev "JSON.stringify([...document.querySelectorAll('[data-rmo-id]')].filter((c) => !c.matches('.previewModal--container, .billboard')).map((c) => ({ badge: (c.querySelector('.rmo-badge') ?? c.querySelector('.rmo-panel'))?.textContent ?? null, id: c.getAttribute('data-rmo-id'), kind: c.getAttribute('data-rmo-type'), runtime: c.getAttribute('data-rmo-runtime'), surface: c.getAttribute('data-uia') || c.className.split(' ')[0], title: c.getAttribute('data-rmo-title') || c.getAttribute('aria-label') || '', year: c.getAttribute('data-rmo-year') })))")
   hovers="[]"
   for i in 0 7 19; do
     ev "(() => { document.querySelectorAll('[data-rmo-crawl]').forEach((e) => e.removeAttribute('data-rmo-crawl')); const c = [...document.querySelectorAll('[data-rmo-id][data-rmo-year]')].filter((c) => !c.matches('.previewModal--container, .billboard'))[$i]; if (!c) return; c.setAttribute('data-rmo-crawl', '1'); c.scrollIntoView({ block: 'center', inline: 'nearest' }) })()" >/dev/null
