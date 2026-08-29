@@ -4,18 +4,18 @@
   position: relative;
 }
 
-/* One pill per card in the top-right corner of the artwork, partitioned by platform: yellow is IMDb, red is Rotten Tomatoes, green is Metacritic, and a missing score simply drops its partition, so a card reads ( 6.6 | 80 | 63 ), ( 6.6 | 80 ), or ( 6.6 ). Numbers only; the color is the label. Each partition is a tinted fill of its hue over a dark base with the number in the hue, the way a status badge reads, and the pill is pointer-transparent so the card underneath still hovers and clicks. */
+/* One label per card, hanging from the top edge of the artwork, centered: the mirror of Netflix's own "Recently added" label at the bottom, so it is flush with the edge, square on top and rounded below. Partitioned by platform: yellow is IMDb, red is Rotten Tomatoes, green is Metacritic, and a missing score simply drops its partition, so a card reads ( 6.6 | 80 | 63 ), ( 6.6 | 80 ), or ( 6.6 ). Numbers only; the color is the label. Each partition is a tinted fill of its hue over a dark base with the number in the hue, the way a status badge reads, and the label is pointer-transparent so the card underneath still hovers and clicks. */
 .rmo-badge {
   backdrop-filter: blur(6px);
   background: rgba(18, 18, 18, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 999px;
+  border-radius: 0 0 6px 6px;
   display: inline-flex;
+  left: 50%;
   overflow: hidden;
   pointer-events: none;
   position: absolute;
-  right: 6px;
-  top: 6px;
+  top: 0;
+  transform: translateX(-50%);
   z-index: 5;
 }
 
@@ -34,10 +34,6 @@
   letter-spacing: -0.01em;
   line-height: 1;
   padding: 0 6px;
-}
-
-.rmo-score + .rmo-score {
-  border-left: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .rmo-score--imdb {
