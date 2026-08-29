@@ -56,7 +56,7 @@ Promoting `canary` to `main` cuts a release (changelog, version bump, GitHub rel
 
 ## Deployment
 
-The web app and the API deploy like any ZeroStarter fork: two Vercel projects sharing one Postgres (the API runs pending migrations on deploy), or `docker compose up --build` for both. Set `WXT_PUBLIC_API_URL` to the deployed API origin before `bun run build` so the extension is granted that host and calls it by default.
+Live at [rate-my-ott.vercel.app](https://rate-my-ott.vercel.app) with the API at [api-rate-my-ott.vercel.app](https://api-rate-my-ott.vercel.app) (Vercel, one Neon Postgres). `main` deploys production, `canary` deploys previews, and the API build applies pending migrations on both. The web app and the API deploy like any ZeroStarter fork: two Vercel projects sharing one Postgres (the API runs pending migrations on deploy), or `docker compose up --build` for both. Set `WXT_PUBLIC_API_URL` to the deployed API origin before `bun run build` so the extension is granted that host and calls it by default.
 
 Ratings data is from OMDb under CC BY-NC 4.0, which suits a personal build; a commercial release needs a paid OMDb tier or another provider behind `api/hono/src/lib/omdb.ts`.
 
