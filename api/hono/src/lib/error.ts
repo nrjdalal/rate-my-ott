@@ -8,7 +8,6 @@ import { z } from "zod"
 
 // Every code the API can put in the { error } envelope. Single source of truth: the TS union, the OpenAPI schema, and the web client all derive from this list. "ERROR" is the catch-all for an HTTPException whose status isn't mapped below.
 export const ERROR_CODES = [
-  "AGENT_LOGIN_FAILED",
   "BAD_REQUEST",
   "CONFLICT",
   "ERROR",
@@ -110,16 +109,8 @@ export const globalErrorResponses: ResponsesWithResolver = {
   500: errorResponse("INTERNAL_SERVER_ERROR", "Internal Server Error"),
 }
 
-// Add to routes behind authMiddleware, the only thing that returns 401.
-export const authErrorResponses: ResponsesWithResolver = {
-  401: errorResponse("UNAUTHORIZED", "Unauthorized"),
-}
 export const conflictErrorResponses: ResponsesWithResolver = {
   409: errorResponse("CONFLICT", "The value already exists"),
-}
-// Add to routes behind the console gate, the only thing that returns 403.
-export const forbiddenErrorResponses: ResponsesWithResolver = {
-  403: errorResponse("FORBIDDEN", "Forbidden"),
 }
 export const notFoundErrorResponses: ResponsesWithResolver = {
   404: errorResponse("NOT_FOUND", "Not found"),

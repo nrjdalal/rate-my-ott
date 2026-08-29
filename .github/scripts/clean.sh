@@ -15,6 +15,4 @@ bunx rimraf --glob \
   "**/node_modules" \
   "**/vercel-bundle" \
   ".github/scripts/*.d.ts" \
-  "web/next/content/blog/meta.json" \
-  "web/next/content/console/docs/meta.json" \
   "web/next/content/docs/meta.json"

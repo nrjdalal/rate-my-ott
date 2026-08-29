@@ -4,9 +4,6 @@ description: Create atomic commits in the conventional format. Use when the user
 source: https://github.com/nrjdalal/zerostarter
 ---
 
-> [!CAUTION]
-> Synced from https://github.com/nrjdalal/zerostarter. Customize this skill or remove this note to stop syncing.
-
 # Git Commit
 
 ATOMIC commits, conventional format. Stage and commit only; never push unless the user explicitly asks.
@@ -47,9 +44,9 @@ Never add `Co-authored-by` (repo rule). The commit-msg hook runs commitlint (`@c
 **Examples**:
 
 ```
-feat(auth): add OAuth provider support
+feat(api): add the ratings lookup route
 fix(api): prevent duplicate webhook delivery
-refactor(web): extract auth middleware into separate module
+refactor(web): extract navbar links into a config
 docs(readme): update installation steps
 chore(deps): bump dependencies to latest versions
 ```

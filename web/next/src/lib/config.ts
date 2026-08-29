@@ -9,14 +9,6 @@ const getInternalApiUrl = () => {
   return undefined
 }
 
-// On a public hosting suffix (baked NEXT_PUBLIC_IS_PRIVATE) the api is a sibling site the browser cannot share a cookie with, so client calls target the app origin and Next's /api rewrite proxies them to the api; the session cookie then lands first-party on the web. Server-side keeps the real api url (SSR reaches the api via internalUrl).
-const getClientApiUrl = () => {
-  if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_IS_PRIVATE === "true") {
-    return env.NEXT_PUBLIC_APP_URL
-  }
-  return env.NEXT_PUBLIC_API_URL
-}
-
 export const config = {
   // Runtime / env-derived app values (NOT brand, brand lives in @packages/config/site)
   app: {
@@ -24,9 +16,9 @@ export const config = {
     version: BUILD_VERSION,
   },
 
-  // API configuration
+  // API configuration: the browser talks to the api origin directly; SSR reaches it via internalUrl (Docker) when set.
   api: {
-    url: getClientApiUrl(),
+    url: env.NEXT_PUBLIC_API_URL,
     internalUrl: getInternalApiUrl(),
   },
 } as const

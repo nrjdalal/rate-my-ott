@@ -23,14 +23,7 @@ export default defineConfig({
     __VERSION__: JSON.stringify(VERSION),
   },
   dts: {},
-  entry: [
-    "src/index.ts",
-    "src/api-hono.ts",
-    "src/auth.ts",
-    "src/db.ts",
-    "src/load-dotenv.ts",
-    "src/web-next.ts",
-  ],
+  entry: ["src/index.ts", "src/api-hono.ts", "src/db.ts", "src/load-dotenv.ts", "src/web-next.ts"],
   minify: true,
   outDir: "dist",
 })

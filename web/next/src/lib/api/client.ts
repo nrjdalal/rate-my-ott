@@ -9,11 +9,7 @@ const hcWithType = (...args: Parameters<typeof hc>): Client => hc<AppType>(...ar
 
 const url = config.api.internalUrl ? config.api.internalUrl : config.api.url
 
-const honoClient = hcWithType(url, {
-  init: {
-    credentials: "include",
-  },
-})
+const honoClient = hcWithType(url)
 
 export const apiClient = honoClient.api
 

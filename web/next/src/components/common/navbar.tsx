@@ -10,15 +10,12 @@ import {
 } from "@remixicon/react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 
-import { Access } from "@/components/common/access"
 import { ModeToggle } from "@/components/common/mode-toggle"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { authClient } from "@/lib/auth/client"
 import { cn, isActive } from "@/lib/utils"
 
 const socialLinks = [
@@ -69,22 +66,12 @@ function SocialLinks({ onClick }: { onClick?: () => void }) {
 
 export function Navbar() {
   const pathname = usePathname()
-  const { data: session, isPending } = authClient.useSession()
-
-  const [toDashboard, setToDashboard] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
 
-  useEffect(() => {
-    setToDashboard(false)
-  }, [pathname])
-
-  if (pathname?.startsWith("/console") || pathname?.startsWith("/dashboard")) return null
-
-  // A link with a `feature` is shown only when that feature is enabled; /hire has none, so it always shows (and is stripped from forks by the CLI).
+  // A link with a `feature` is shown only when that feature is enabled.
   const allNavLinks: { href: string; label: string; external?: boolean; feature?: Feature }[] = [
     { href: "/docs", label: "Documentation", feature: "docs" },
     { href: "/api/docs", label: "API Docs", external: true, feature: "apiDocs" },
-    { href: "/blog", label: "Blog", feature: "blog" },
   ]
   const navLinks = allNavLinks.filter((link) => !link.feature || features[link.feature])
 
@@ -132,32 +119,6 @@ export function Navbar() {
           <div className="mr-5 hidden items-center gap-2.5 lg:flex">
             <SocialLinks />
           </div>
-
-          {/* Shell paints immediately; only the label fades in once auth resolves, so the box never pops and a logged-in user never sees a flash of Login. */}
-          {isPending ? (
-            <Button
-              className="pointer-events-none w-24"
-              variant="outline"
-              aria-hidden
-              tabIndex={-1}
-            />
-          ) : session?.user ? (
-            <Button
-              role="link"
-              className="w-24"
-              variant="outline"
-              onClick={() => setToDashboard(true)}
-              render={<Link href="/dashboard" />}
-            >
-              {toDashboard ? (
-                <Spinner />
-              ) : (
-                <span className="animate-in fade-in duration-1000">Dashboard</span>
-              )}
-            </Button>
-          ) : (
-            <Access labelClassName="animate-in fade-in duration-1000" />
-          )}
 
           <div className="lg:-mr-2.5">
             <ModeToggle />

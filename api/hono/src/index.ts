@@ -12,7 +12,7 @@ import { z } from "zod"
 import { errorHandler, globalErrorResponses, jsonError } from "@/lib/error"
 import { createServer, upgradeWebSocket } from "@/lib/server"
 import { rateLimiterMiddleware, requireFeature } from "@/middlewares"
-import { agentsRouter, authRouter, v1Router, waitlistRouter } from "@/routers"
+import { v1Router } from "@/routers"
 
 const BUILD_VERSION = getBuildVersion()
 
@@ -143,10 +143,7 @@ socket.addEventListener("message", (event) => {
       }
     }),
   )
-  .route("/agents", agentsRouter)
-  .route("/auth", authRouter)
   .route("/v1", v1Router)
-  .route("/waitlist", waitlistRouter)
   // Gate both the OpenAPI document and the Scalar UI on apiDocs; the UI fetches the spec, so gating only the UI would leave the full spec public.
   .use("/openapi.json", requireFeature("apiDocs"))
   .get(
@@ -173,7 +170,6 @@ socket.addEventListener("message", (event) => {
   .get("/docs", apiReference)
 
 export type AppType = typeof routes
-export type { BatchAnswer, BatchOutcome, BatchRefusalCode } from "@/lib/batch"
 export type { ErrorCode } from "@/lib/error"
 
 // Bun.serve() shape locally and self-hosted, Node http.Server on Vercel; see @/lib/server.

@@ -4,9 +4,6 @@ description: Create and apply a Drizzle schema change. Use when adding or alteri
 source: https://github.com/nrjdalal/zerostarter
 ---
 
-> [!CAUTION]
-> Synced from https://github.com/nrjdalal/zerostarter. Customize this skill or remove this note to stop syncing.
-
 # Database Migration
 
 PostgreSQL with Drizzle ORM. Schema lives in `packages/db/src/schema/`, migrations in `packages/db/drizzle/`. Schema, SQL, and snapshot travel together in one PR.
@@ -15,13 +12,13 @@ PostgreSQL with Drizzle ORM. Schema lives in `packages/db/src/schema/`, migratio
 
 **Never generate or apply a migration before the user has seen the schema and said go.** Post the table or the altered columns, name the choices that are hard to reverse (nullability, what a null means, foreign keys and their delete behaviour, indexes, whether anything is derived or generated, retention), and stop there.
 
-Two reasons this is a hard stop rather than a courtesy. A shape is cheap to argue about and expensive to change once rows exist, so the review has to happen before the write. And `canary` and production share one database, so applying reaches production the moment it runs, not when the release ships.
+Two reasons this is a hard stop rather than a courtesy. A shape is cheap to argue about and expensive to change once rows exist, so the review has to happen before the write. And when `canary` and production share one database, applying reaches production the moment it runs, not when the release ships.
 
 ## 1. Edit the schema
 
-- Schema files group by concern, not one per table: `auth.ts` holds the Better Auth tables, `console.ts` the ones the console owns. A new table joins the file for its concern, or starts a new one when it is a new concern, and that file needs an export from `index.ts`: `export * from "@/schema/<name>"`. Miss that export and the table never reaches a migration.
-- For examples, read `auth.ts` (tables, relations, indexes) and `waitlist.ts` (a minimal non-auth table).
-- Conventions: `text` primary keys (`.$defaultFn(() => crypto.randomUUID())` on non-auth tables), `timestamp("created_at").defaultNow().notNull()`, snake_case columns, `onDelete: "cascade"` on FKs, and an `index()` on every FK column. Both bend for the same kind of column: use `onDelete: "set null"` when the row outlives the reference and the column is only provenance, and skip the index when nothing queries by it and the table is small enough that the delete-time scan is free. The `console.ts` tables are both: their `actor_id` must not take a rule or a history entry with it when an account is deleted, and although the lists join, search and sort through it, every one of those drives off `user`'s primary key rather than this column, so an index here would serve only the delete-time sweep. Index a FK when a query narrows on the column itself, or when the table is large enough for the sweep to matter. When a `set null` column is the only record of who acted, store the readable text beside it (`activity.actor`, `allowlist.actor`) so a row does not become anonymous, and can name an actor that was never an account at all.
+- Schema files group by concern, not one per table. A new table joins the file for its concern, or starts a new one when it is a new concern, and that file needs an export from `index.ts`: `export * from "@/schema/<name>"`. Miss that export and the table never reaches a migration.
+- Conventions: `text` primary keys (`.$defaultFn(() => crypto.randomUUID())`), `timestamp("created_at").defaultNow().notNull()`, snake_case columns, `onDelete: "cascade"` on FKs, and an `index()` on every FK column. Both bend for the same kind of column: use `onDelete: "set null"` when the row outlives the reference and the column is only provenance, and skip the index when nothing queries by it and the table is small enough that the delete-time scan is free. Index a FK when a query narrows on the column itself, or when the table is large enough for the sweep to matter. When a `set null` column is the only record of who acted, store the readable text beside it so a row does not become anonymous.
+- Keep column definitions A→Z inside a table, with `id` in its alphabetical place; a unique natural key gets a `uniqueIndex`, and an upsert targets it with `onConflictDoUpdate`.
 
 ## 2. Generate and review
 
@@ -33,7 +30,7 @@ Read the generated `packages/db/drizzle/NNNN_*.sql`. Done when that SQL, its `me
 
 ## 3. Point at a throwaway database first
 
-**Local work runs against a disposable container, never the `POSTGRES_URL` in the root `.env`.** That URL is the shared Neon database, and `canary` and production both read it, so a migration applied there is applied to production, and a column renamed under running code takes that code down. This is not hypothetical: it has happened, and step 0 and this step both exist because of it.
+**Local work runs against a disposable container, never a shared `POSTGRES_URL`.** Once the root `.env` points at a hosted database that `canary` and production both read, a migration applied there is applied to production, and a column renamed under running code takes that code down. The `POSTGRES_URL` that `init` wrote is a local pglaunch container, which is exactly this.
 
 ```bash
 bunx pglaunch -k                                    # disposable Postgres, -k keeps it across restarts
@@ -68,5 +65,5 @@ bun run db:studio
 
 ## Notes
 
-- `POSTGRES_URL` comes from the root `.env`, which is why step 3 overrides it per worktree: the value that ships in `.env` is the shared one.
+- `POSTGRES_URL` comes from the root `.env`, which is why step 3 overrides it per worktree once that value points at a shared database.
 - Never edit an applied migration; generate a new one instead.

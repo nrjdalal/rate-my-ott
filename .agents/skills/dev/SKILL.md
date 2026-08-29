@@ -4,12 +4,9 @@ description: Start, restart, and verify the rate-my-ott dev stack. `bun run dev`
 source: https://github.com/nrjdalal/zerostarter
 ---
 
-> [!CAUTION]
-> Synced from https://github.com/nrjdalal/zerostarter. Customize this skill or remove this note to stop syncing.
-
 # Dev Stack
 
-`bun run dev` runs both apps (Next.js web + Hono API) through **portless**: stable named `.localhost` URLs off one unprivileged HTTP proxy on `:1355`, instead of raw ports. In a linked worktree the branch name prefixes each host, so parallel worktrees never collide on a port. They do share the auth session, since the cookie is scoped to the base `.localhost` domain, so signing in on one worktree's URL signs you in on the others. Bare `bun run dev` uses turbo's TUI, which needs an interactive terminal; run stream mode detached instead.
+`bun run dev` runs both apps (Next.js web + Hono API) through **portless**: stable named `.localhost` URLs off one unprivileged HTTP proxy on `:1355`, instead of raw ports. In a linked worktree the branch name prefixes each host, so parallel worktrees never collide on a port. Bare `bun run dev` uses turbo's TUI, which needs an interactive terminal; run stream mode detached instead.
 
 ## Start
 
@@ -47,14 +44,3 @@ curl -sf --retry 60 --retry-delay 1 --retry-connrefused "$API/api/health" > /dev
 
 Restart the same way after changing `@packages/*` exports the API consumes: they resolve to built dist, so run `bunx turbo run build --filter=@packages/<name>` first.
 
-## Agent login
-
-Sign in as `LocalAgent` (local only, trusted Origin required). The route is gated on `AGENT_SIGNIN_ENABLED`: set it to `true` in `.env` first, or the route 404s. It is off by default, so a fresh clone and any deploy expose no session-minting route.
-
-```bash
-WEB=$(bunx portless get rate-my-ott); API=$(bunx portless get api.rate-my-ott)
-curl -sS -c cookies.txt -X POST -H "Origin: $WEB" "$API/api/agents/sign-in-as"
-curl -sS -b cookies.txt "$API/api/v1/user"
-```
-
-In the browser: click **Login** in the top navbar (hidden on `/console` and `/dashboard`), then **Login (agents)** in the dialog (development only, with `AGENT_SIGNIN_ENABLED=true`).

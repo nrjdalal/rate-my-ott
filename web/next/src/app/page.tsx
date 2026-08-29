@@ -1,10 +1,7 @@
-import { features, site } from "@packages/config/site"
-import { redirect } from "next/navigation"
+import { site } from "@packages/config/site"
 
-// Fresh fork: the waitlist capture when the waitlist feature is on, otherwise a plain landing page. Replace this with your real home when ready.
+// A plain landing page. Replace this with the real home when ready.
 export default function Home() {
-  if (features.waitlist) redirect("/waitlist")
-
   return (
     <main className="flex min-h-svh flex-col items-center justify-center p-8 text-center">
       <div className="mx-auto flex w-full max-w-xl flex-col items-center">

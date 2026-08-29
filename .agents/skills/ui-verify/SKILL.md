@@ -4,9 +4,6 @@ description: Verify a frontend or UI change in a real browser. Use after any cha
 source: https://github.com/nrjdalal/zerostarter
 ---
 
-> [!CAUTION]
-> Synced from https://github.com/nrjdalal/zerostarter. Customize this skill or remove this note to stop syncing.
-
 # UI Verify
 
 A green type-check and a clean lint prove the code compiles, not that the page renders. Drive it in a real browser before the PR.
@@ -24,7 +21,7 @@ agent-browser open "$WEB/<route>"
 agent-browser snapshot   # read the page, then click/type/verify
 ```
 
-Behind auth, sign in first with the **Login (agents)** button (shown once `AGENT_SIGNIN_ENABLED=true`) or the local sign-in (`dev` skill). For an end-to-end change, or whenever asked, drive the whole flow, not just the screen you touched. Done when you have watched the change render and behave, not merely that the route loaded.
+For an end-to-end change, or whenever asked, drive the whole flow, not just the screen you touched. Done when you have watched the change render and behave, not merely that the route loaded.
 
 ## 3. Check it holds up
 

@@ -11,16 +11,6 @@ const docsConfig = {
       },
     ],
   },
-  console: {
-    "Getting Started": [
-      {
-        "/console/docs": {
-          title: "Introduction",
-          description: "Internal documentation.",
-        },
-      },
-    ],
-  },
 } satisfies DocsConfig
 
 export default docsConfig
