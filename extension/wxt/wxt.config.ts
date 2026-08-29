@@ -4,6 +4,8 @@ import { createExtensionEnv } from "@packages/env/extension-wxt"
 import tailwindcss from "@tailwindcss/vite"
 import { defineConfig } from "wxt"
 
+import pkg from "../../package.json" with { type: "json" }
+
 // The extension reads the repo-root .env like every other workspace (load-dotenv resolves ../../.env from this directory), so WXT_PUBLIC_API_URL lives beside NEXT_PUBLIC_API_URL rather than in a second .env here. Under a skip flag (CI, a worktree pre-commit build) a missing URL becomes a shape-valid dummy, mirroring @packages/env's polyfills, since a build that lacks it must still pass. Vite then exposes the WXT_PUBLIC_* it finds in process.env as import.meta.env, which is where utils/env.ts reads it back.
 const skip = process.env.SKIP_ENV_VALIDATION === "true"
 if (skip && !process.env.WXT_PUBLIC_API_URL) process.env.WXT_PUBLIC_API_URL = "https://polyfill.url"
@@ -18,6 +20,8 @@ export default defineConfig({
   imports: false,
   manifest: ({ mode }) => ({
     name: site.name,
+    // The repo's release version (bumped by the canary-to-main release flow), so a store listing, a release zip, and the changelog all say the same number; the workspace's own package.json stays at 0.0.0 like every other workspace.
+    version: pkg.version,
     // Chrome caps a manifest description at 132 characters.
     description: site.description.slice(0, 132),
     permissions: ["storage"],
@@ -31,4 +35,6 @@ export default defineConfig({
   vite: () => ({ plugins: [tailwindcss()] }),
   // `bun run dev` runs this beside web and api and must not spawn a browser; a local web-ext.config.ts (gitignored) re-enables it with your own Chrome profile.
   webExt: { disabled: true },
+  // What a release attaches: rate-my-ott-1.2.3-chrome.zip and rate-my-ott-1.2.3-firefox.zip.
+  zip: { artifactTemplate: "rate-my-ott-{{version}}-{{browser}}.zip" },
 })

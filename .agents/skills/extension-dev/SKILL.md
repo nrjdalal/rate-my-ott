@@ -31,10 +31,14 @@ The API URL is baked at build from the repo-root `.env` (`WXT_PUBLIC_API_URL`, r
 bun run dev                                  # web + api + extension in watch mode to .output/chrome-mv3-dev (no browser is launched)
 cd extension/wxt && bun run build            # production build to .output/chrome-mv3
 cd extension/wxt && bun run build:firefox    # .output/firefox-mv3
-cd extension/wxt && bun run zip              # store package
+cd extension/wxt && bun run zip              # rate-my-ott-<version>-chrome.zip in .output/ (version = root package.json)
 ```
 
 Chrome: `chrome://extensions`, Developer mode, Load unpacked, pick `extension/wxt/.output/chrome-mv3-dev` (a dev build) or `.output/chrome-mv3` (a production build). After an edit, WXT rebuilds; click the extension's reload icon (or `Alt+R` on a Netflix tab) to pick it up. To have WXT launch a Chrome profile for you, add a gitignored `web-ext.config.ts` next to `wxt.config.ts` with `disabled: false` and a `chromiumProfile`.
+
+## Releases
+
+The release workflow (`.github/workflows/auto-release.yml`, on a canary-to-main merge) builds `bun run zip` and `zip:firefox` with `WXT_PUBLIC_API_URL` from the repo variable of that name (the production API) and uploads both zips to the GitHub release; the manifest version comes from the root `package.json`, which the same flow bumps. A local production zip is the same two commands with the URL set inline.
 
 ## Verify a change
 

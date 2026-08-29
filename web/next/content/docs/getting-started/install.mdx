@@ -5,6 +5,10 @@ title: Install the extension
 description: Get an OMDb key, run the stack, load the extension into Chrome, and point it at the API.
 ---
 
+## Just want to use it?
+
+Every release on GitHub carries a ready-made build against the hosted API, one zip per browser: [github.com/nrjdalal/rate-my-ott/releases/latest](https://github.com/nrjdalal/rate-my-ott/releases/latest). Chrome does not install extensions from outside its Web Store, so unzip `rate-my-ott-<version>-chrome.zip`, open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and pick the unzipped folder; a new release means unzipping again and clicking the card's reload icon. Nothing below is needed for that, the steps that follow are for running the stack yourself.
+
 ## 1. Get an OMDb key
 
 The API answers ratings from [OMDb](https://www.omdbapi.com/apikey.aspx). A free key allows 1,000 requests a day, which the Postgres cache stretches a long way, since a title is fetched once and then served from the cache for a week. Put the key in the repo-root `.env`:

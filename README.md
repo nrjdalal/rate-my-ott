@@ -50,6 +50,10 @@ bun run dev
 | `bun run shadcn:update`           | Update shadcn/ui components                                     |
 | `cd extension/wxt && bun run zip` | Pack the extension for the store                                |
 
+## Releases
+
+Promoting `canary` to `main` cuts a release (changelog, version bump, GitHub release), and the release workflow attaches the extension zips built against the production API: `rate-my-ott-<version>-chrome.zip` and `-firefox.zip`, on [releases/latest](https://github.com/nrjdalal/rate-my-ott/releases/latest). The extension's manifest version is the repo version, so a zip, the changelog, and a store listing agree.
+
 ## Deployment
 
 The web app and the API deploy like any ZeroStarter fork: two Vercel projects sharing one Postgres (the API runs pending migrations on deploy), or `docker compose up --build` for both. Set `WXT_PUBLIC_API_URL` to the deployed API origin before `bun run build` so the extension is granted that host and calls it by default.
