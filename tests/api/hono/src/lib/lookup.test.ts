@@ -90,24 +90,24 @@ describe("titleSpellings", () => {
     expect(titleVariants("Ocean's 11")).toEqual(["Ocean's 11", "The Ocean's 11"])
   })
 
-  test("only the unsubtitled spelling is loose, its article variant with it, and never the title itself", () => {
+  test("spellings come in tiers: the platform's own, its article variants, then the loose ones, of which the subtitle alone must be a work of its own", () => {
     expect(titleSpellings("The Office (U.S.)")).toEqual([
-      { loose: false, spelling: "The Office (U.S.)" },
-      { loose: false, spelling: "Office (U.S.)" },
-      { loose: false, spelling: "The Office" },
-      { loose: false, spelling: "Office" },
+      { own: false, spelling: "The Office (U.S.)", tier: 0 },
+      { own: false, spelling: "Office (U.S.)", tier: 1 },
+      { own: false, spelling: "The Office", tier: 0 },
+      { own: false, spelling: "Office", tier: 1 },
     ])
     expect(titleSpellings("Dune: Part Two")).toEqual([
-      { loose: false, spelling: "Dune: Part Two" },
-      { loose: false, spelling: "Dune: Part 2" },
-      { loose: false, spelling: "The Dune: Part Two" },
-      { loose: false, spelling: "The Dune: Part 2" },
-      { loose: true, spelling: "Dune" },
-      { loose: true, spelling: "The Dune" },
-      { loose: true, spelling: "Part Two" },
-      { loose: true, spelling: "Part 2" },
-      { loose: true, spelling: "The Part Two" },
-      { loose: true, spelling: "The Part 2" },
+      { own: false, spelling: "Dune: Part Two", tier: 0 },
+      { own: false, spelling: "Dune: Part 2", tier: 0 },
+      { own: false, spelling: "The Dune: Part Two", tier: 1 },
+      { own: false, spelling: "The Dune: Part 2", tier: 1 },
+      { own: false, spelling: "Dune", tier: 2 },
+      { own: false, spelling: "The Dune", tier: 2 },
+      { own: true, spelling: "Part Two", tier: 2 },
+      { own: true, spelling: "Part 2", tier: 2 },
+      { own: true, spelling: "The Part Two", tier: 2 },
+      { own: true, spelling: "The Part 2", tier: 2 },
     ])
     expect(titleVariants("Half Bad: The Bastard Son & The Devil Himself")).toEqual([
       "Half Bad: The Bastard Son & The Devil Himself",
@@ -118,8 +118,8 @@ describe("titleSpellings", () => {
       "Bastard Son & The Devil Himself",
     ])
     expect(titleSpellings("Dune")).toEqual([
-      { loose: false, spelling: "Dune" },
-      { loose: false, spelling: "The Dune" },
+      { own: false, spelling: "Dune", tier: 0 },
+      { own: false, spelling: "The Dune", tier: 1 },
     ])
   })
 })

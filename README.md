@@ -50,6 +50,8 @@ bun run dev
 | `bun run db:migrate`              | Apply pending migrations                                        |
 | `bun run db:studio`               | Open Drizzle Studio                                             |
 | `bun run imdb:sync`               | Rebuild the IMDb index from IMDb's daily datasets               |
+| `bun run crawl`                   | Crawl Netflix headless with the built extension                 |
+| `bun run crawl:report`            | Replay the crawl's unbadged titles against the API              |
 | `bun run shadcn:update`           | Update shadcn/ui components                                     |
 | `cd extension/wxt && bun run zip` | Pack the extension for the store                                |
 

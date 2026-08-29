@@ -356,6 +356,10 @@ describe("readModal and renderPanel", () => {
 
   test("a series modal is typed by its season count, a limited series too, and a miss or an unrated title gets no row", () => {
     expect(readModal(page(MODAL.replace("2h 35m", "Limited Series")))?.query.type).toBe("series")
+    // A duration in another language is no length: "1 Std. 39 Min." is not 39 minutes.
+    expect(
+      readModal(page(MODAL.replace("2h 35m", "1 Std. 39 Min.")))?.query.runtime,
+    ).toBeUndefined()
     const doc = page(MODAL.replace("2h 35m", "3 Seasons"))
     const modal = readModal(doc)
     expect(modal?.query.type).toBe("series")

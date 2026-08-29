@@ -143,8 +143,10 @@ export const addAka = (spellings: Spellings, aka: ImdbAka): boolean => {
 // The short names a well-known title also answers to: what stands before the first colon or spaced dash in its own names ("Bleach" for "Bleach: Thousand-Year Blood War", "Tokyo Ghoul" for "Tokyo Ghoul:re", "Dahmer" for "Dahmer - Monster: The Jeffrey Dahmer Story"), since a platform shows a season or a sequel under the parent's bare name. Indexed as alternate names, so a title's own name always outranks them, and only for a well-known title, or every "Alpha: Something" would answer to "Alpha".
 const SUBTITLE_SEPARATOR = /:|\s-\s/
 export const shortNames = (
-  basics: Pick<ImdbBasics, "originalTitle" | "primaryTitle">,
+  basics: Pick<ImdbBasics, "originalTitle" | "primaryTitle" | "titleType">,
 ): string[] => {
+  // A series only: a platform shows a season under the parent's bare name, but a subtitled film is another work, and "Home: Something" must not answer to "Home".
+  if (imdbType(basics.titleType) !== "series") return []
   const own = nameKeys(basics)
   const keys: string[] = []
   for (const name of [basics.primaryTitle, basics.originalTitle]) {
@@ -221,10 +223,14 @@ export const RUNTIME_MARGIN_MIN = 3
 export const OPEN_RUN_MIN_VOTES = 1000
 
 export type MatchOptions = {
-  // The spelling is looser than the platform's (a subtitle dropped). A film then must have been released the stated year exactly, since a subtitled film is another work ("Dune: Part Two" is not "Dune"); a series need only be well known and running that year, since a subtitled series is a season of it ("Monster: The Ed Gein Story" is IMDb's "Monster"), and a real spin-off has an IMDb entry of its own that the platform's spelling finds first.
+  // A film must have been released the stated year exactly: under a spelling that is not the platform's own (an article dropped or put on, a subtitle dropped, the subtitle alone), a year's tolerance would let "Dune" take "Dune: Part Two" or "The Kingdom" take last year's "Kingdom".
   exactYear?: boolean
+  // The spelling is the subtitle alone ("The Bastard Son & The Devil Himself" out of "Half Bad: ..."): a series must be a work of its own from the stated year, started within a year of it, never a parent that merely ran through it.
+  fresh?: boolean
   // The current year, for a series whose run is open.
   now?: number
+  // The spelling is the name without its subtitle, which names a parent as easily as a namesake: a series is taken only when it is well known (a subtitled series is a season of it, "Monster: The Ed Gein Story" is IMDb's "Monster"), since a real spin-off has an entry of its own that a tighter spelling finds first.
+  parent?: boolean
 }
 
 const votesOf = (title: ImdbTitle) => title.votes ?? 0
@@ -240,7 +246,14 @@ export function fitsQuery(
   if (query.type && kind !== query.type) return false
   if (query.year && title.startYear !== null) {
     if (options.exactYear && kind !== "series" && title.startYear !== query.year) return false
-    if (options.exactYear && kind === "series" && votesOf(title) < OPEN_RUN_MIN_VOTES) return false
+    if (
+      options.fresh &&
+      kind === "series" &&
+      Math.abs(title.startYear - query.year) > YEAR_TOLERANCE
+    ) {
+      return false
+    }
+    if (options.parent && kind === "series" && votesOf(title) < OPEN_RUN_MIN_VOTES) return false
     if (kind === "series") {
       if (query.year < title.startYear - YEAR_TOLERANCE) return false
       if (title.endYear !== null) {
@@ -305,11 +318,18 @@ export function pickImdbTitle(
   const year = query.year
   const yearGap = (title: ImdbTitle) =>
     title.startYear === null ? 0 : Math.abs(title.startYear - year)
+  // A year further off the stated one than a well-known best is the tolerance at work, not the title; the same year and, to within the margin, the same stated length is a duplicate listing.
+  const furtherOff = (title: ImdbTitle) =>
+    yearGap(title) > yearGap(top) && votesOf(top) >= OPEN_RUN_MIN_VOTES
+  const duplicate = (title: ImdbTitle) =>
+    title.startYear === top.startYear &&
+    Number.isFinite(gap(top)) &&
+    Math.abs(gap(title) - gap(top)) < RUNTIME_MARGIN_MIN
   const tooNew = (title: ImdbTitle) =>
     (title.votes === null ||
       (title.votes < DOMINANT_MIN_VOTES && (title.startYear ?? now) >= now - 1)) &&
-    yearGap(title) <= yearGap(top) &&
-    !(Number.isFinite(gap(top)) && gap(top) <= gap(title))
+    !furtherOff(title) &&
+    !duplicate(title)
   if (
     !options.exactYear &&
     !pool.some(tooNew) &&
@@ -327,19 +347,28 @@ export type Reason = (typeof REASONS)[number]
 export type MissReason = Exclude<Reason, "unrated">
 export type Outcome = { reason: MissReason; title: null } | { reason: null; title: ImdbTitle }
 
-// The title the index holds for a query, spelling by spelling (as the platform wrote it, then without a parenthetical qualifier, then without a subtitle after a colon), stopping at the first spelling any candidate fits: what fits under the platform's own spelling is either the answer or an ambiguity, never a reason to try a looser one. The unsubtitled spelling names a namesake as easily as the title, so a film is taken under it only for the stated year exactly, and a series only when it is well known and running that year (a subtitled series is a season of it). Only a hit under the platform's own spellings makes the name known; a parent refused under the loose one is not a namesake.
+// The title the index holds for a query, spelling by spelling in tiers (the platform's own, then with the article dropped or put on, then loose: without its subtitle, or the subtitle alone), stopping at the first spelling any candidate fits: what fits under the platform's own spelling is either the answer or an ambiguity, never a reason to try a looser one, and a tier is tried only while the index knows nothing under the tiers above. The unsubtitled spelling names a namesake as easily as the title, so a film is taken under it only for the stated year exactly, and a series only when it is well known and running that year (a subtitled series is a season of it). Only a hit under the platform's own spellings makes the name known; a parent refused under the loose one is not a namesake.
 export function resolveOutcome(
   query: TitleQuery,
   candidatesFor: (spelling: string) => ImdbTitle[],
   now?: number,
 ): Outcome {
   if (!query.year) return resolveUnstated(query, candidatesFor)
+  // The loose tier is tried only while the index knows nothing under the name as written or with its article moved: a spin-off whose own entry misfits (a stale end year) must not fall through to its parent's score. An article variant is always tried, after the name as written: "Devil's Advocate" has namesakes of its own that misfit, and the film is "The Devil's Advocate".
   let known = false
-  for (const { loose, spelling } of titleSpellings(query.title)) {
+  for (const { own, spelling, tier } of titleSpellings(query.title)) {
+    if (tier === 2 && known) break
     const candidates = candidatesFor(spelling)
     if (candidates.length === 0) continue
-    if (!loose) known = true
-    const options: MatchOptions = { exactYear: loose, now }
+    if (tier < 2) known = true
+    const options: MatchOptions =
+      tier === 0
+        ? { now }
+        : tier === 1
+          ? { exactYear: true, now }
+          : own
+            ? { exactYear: true, fresh: true, now }
+            : { exactYear: true, now, parent: true }
     if (!candidates.some((candidate) => fitsQuery(candidate, query, options))) continue
     const title = pickImdbTitle(candidates, query, options)
     return title ? { reason: null, title } : { reason: "ambiguous", title: null }
@@ -352,8 +381,8 @@ function resolveUnstated(
   query: TitleQuery,
   candidatesFor: (spelling: string) => ImdbTitle[],
 ): Outcome {
-  for (const { loose, spelling } of titleSpellings(query.title)) {
-    if (loose) break
+  for (const { spelling, tier } of titleSpellings(query.title)) {
+    if (tier === 2) break
     if (candidatesFor(spelling).length > 0) return { reason: "unstated", title: null }
   }
   return { reason: "unknown", title: null }

@@ -202,9 +202,10 @@ function readOneModal(root: ParentNode, modal: HTMLElement): ModalInfo | null {
   const parsedYear = Number(text(modal.querySelector(".year"))?.match(/\d{4}/)?.[0]) || undefined
   const duration = text(modal.querySelector(".duration")) ?? ""
   // "1h 39m" is the film's length, the strongest thing to check a namesake against, where the props stated none.
-  const hours = Number(duration.match(/(\d+)\s*h/i)?.[1] ?? 0)
-  const minutes = Number(duration.match(/(\d+)\s*m/i)?.[1] ?? 0)
-  const parsedRuntime = hours * 60 + minutes || undefined
+  const length = duration.match(/^\s*(?:(\d+)\s*h)?\s*(?:(\d+)\s*m)?\s*$/i)
+  const parsedRuntime = length
+    ? Number(length[1] ?? 0) * 60 + Number(length[2] ?? 0) || undefined
+    : undefined
   // "6 Episodes", "3 Seasons", or "Limited Series" for a show; "2h 33m" for a film.
   const parsedType = /season|episode|series/i.test(duration)
     ? ("series" as const)

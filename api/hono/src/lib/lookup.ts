@@ -11,7 +11,7 @@ export const normalizeTitle = (value: string) =>
 export const lookupKey = (query: TitleQuery) =>
   `${normalizeTitle(query.title)}|${query.year ?? ""}|${query.type ?? ""}|${query.runtime ?? ""}`
 
-// The spellings to try when the index does not know a title as the platform writes it: as given, then without a parenthetical qualifier ("The Office (U.S.)" is still The Office), then without a subtitle after a colon ("Grand Theft Auto VI: An Extended Look"), then the subtitle alone ("Half Bad: The Bastard Son & The Devil Himself" is IMDb's "The Bastard Son & the Devil Himself"), both loose: they name a parent or a namesake as easily as the title. Each is followed by its spelling with the leading English article dropped or "The" put on ("Devil's Advocate" is IMDb's "The Devil's Advocate"), and, where a number stands as a word, with it written the other way ("Fear Street Part 1: 1994" is IMDb's "Fear Street: Part One - 1994"), all as strict as the spelling itself: the article and the numeral are the platform's to choose, and the year, kind, and runtime still have to fit. Each distinct spelling is listed once, in that order.
+// The spellings to try for a title, in tiers the resolver descends only while the index knows nothing under the tier above. Tier 0 is the platform's own: as given, without a parenthetical qualifier ("The Office (U.S.)" is still The Office), and with a standalone number written the other way ("Fear Street Part 1: 1994" is IMDb's "Fear Street: Part One - 1994"). Tier 1 is each of those with its leading English article dropped or "The" put on ("Devil's Advocate" is IMDb's "The Devil's Advocate"), the article being the platform's to keep, tried after the name as written and with a film's year exact, since "The Kingdom" and "Kingdom" can be two works. Tier 2 is loose: the name without its subtitle after a colon ("Grand Theft Auto VI: An Extended Look"), which names a parent or a namesake as easily as the title, and the subtitle alone ("Half Bad: The Bastard Son & The Devil Himself" is IMDb's "The Bastard Son & the Devil Himself"), which must then be a work of its own from the stated year; both with their article and number variants. Each distinct spelling is listed once, in that order.
 const ARTICLE = /^(?:the|a|an)\s+/i
 const NUMBERS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
 const WORDS = new RegExp(`\\b(${NUMBERS.join("|")})\\b`, "gi")
@@ -28,32 +28,38 @@ const renumbered = (spelling: string): string | undefined => {
   )
   return numbered !== spelling ? numbered : undefined
 }
-export type Spelling = { loose: boolean; spelling: string }
+
+// A spelling's tier, and whether it must name a work of its own from the stated year (the subtitle alone).
+export type Spelling = { own: boolean; spelling: string; tier: 0 | 1 | 2 }
 
 export const titleSpellings = (title: string): Spelling[] => {
   const spellings: Spelling[] = []
-  const push = (value: string, loose: boolean) => {
+  const push = (value: string, tier: 0 | 1 | 2, own: boolean) => {
     const spelling = value.replace(/\s+/g, " ").trim()
     if (spelling && !spellings.some((known) => known.spelling === spelling)) {
-      spellings.push({ loose, spelling })
+      spellings.push({ own, spelling, tier })
     }
   }
-  const add = (value: string, loose: boolean) => {
+  const add = (value: string, tier: 0 | 2, own = false) => {
     const spelling = value.replace(/\s+/g, " ").trim()
     if (!spelling) return
     const bare = spelling.replace(ARTICLE, "")
-    for (const form of [spelling, bare === spelling ? `The ${spelling}` : bare]) {
-      push(form, loose)
+    const forms: [string, 0 | 1 | 2][] = [
+      [spelling, tier],
+      [bare === spelling ? `The ${spelling}` : bare, tier === 0 ? 1 : 2],
+    ]
+    for (const [form, rank] of forms) {
+      push(form, rank, own)
       const other = renumbered(form)
-      if (other) push(other, loose)
+      if (other) push(other, rank, own)
     }
   }
-  add(title, false)
+  add(title, 0)
   const unqualified = title.replace(/\s*\([^)]*\)/g, "")
-  add(unqualified, false)
+  add(unqualified, 0)
   const [head, ...subtitle] = unqualified.split(":")
-  add(head as string, true)
-  if (subtitle.length > 0) add(subtitle.join(":"), true)
+  add(head as string, 2)
+  if (subtitle.length > 0) add(subtitle.join(":"), 2, true)
   return spellings
 }
 
