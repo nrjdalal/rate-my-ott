@@ -6,11 +6,14 @@ import type { Rating } from "../../../../extension/wxt/utils/api"
 import {
   findCards,
   hasBadge,
+  hasBillboardRating,
   hasPanel,
+  readBillboard,
   readCard,
   readModal,
   removeAll,
   renderBadge,
+  renderBillboardRating,
   renderPanel,
 } from "../../../../extension/wxt/utils/netflix"
 
@@ -39,6 +42,8 @@ const MODAL = `
   <div class="previewModal--detailsMetadata-left">
     <div data-uia="videoMetadata--container" class="videoMetadata--container"><div class="year">2021</div><span class="duration">2h 35m</span></div>
     <div class="previewModal--detailsMetadata-right"><div class="previewModal--tags"><span class="previewModal--tags-label">Cast:</span><span class="tag-item"><a href="/browse/person/1">Someone</a></span></div></div>
+    <div class="titleCard--container" data-uia="titleCard--container" aria-label="Little Brother" data-rmo-meta data-rmo-id="81521988" data-rmo-year="2026" data-rmo-type="movie" data-rmo-runtime="101"><div class="titleCard-imageWrapper has-duration"><div class="ptrack-content"><img alt=""></div><div class="duration">1h 40m</div></div><div class="titleCard--metadataWrapper"><span class="year">2026</span></div></div>
+    <div class="titleCard--container" data-uia="titleCard--container" aria-label="Not Yet Stamped"><div class="titleCard-imageWrapper"><img alt=""></div></div>
   </div>
 </div>
 `
@@ -107,6 +112,27 @@ describe("readCard", () => {
     expect(readCard(empty as Element)).toBeNull()
   })
 
+  test("a stamp that names another id or label is no stamp: the card is pending again", () => {
+    const doc = page(CARDS)
+    const [standard] = findCards(doc)
+    standard?.setAttribute("data-rmo-id", "999")
+    expect(readCard(standard as Element)).toEqual({
+      id: "81616273",
+      pending: true,
+      title: "Operation Safed Sagar: The Untold Story of the Kargil War",
+    })
+    const modal = page(MODAL)
+    const similar = findCards(modal).find(
+      (c) => c.getAttribute("data-uia") === "titleCard--container",
+    ) as Element
+    similar.setAttribute("data-rmo-title", "Someone Else")
+    expect(readCard(similar)).toEqual({
+      id: "Little Brother",
+      pending: true,
+      title: "Little Brother",
+    })
+  })
+
   test("a ranked card hosts its badge on the artwork wrapper, not the rank numeral or the anchor", () => {
     const doc = page(CARDS)
     const ranked = findCards(doc)[1] as Element
@@ -147,12 +173,87 @@ describe("renderBadge", () => {
   })
 })
 
+const BILLBOARD = `
+<section data-uia="billboard" data-rmo-meta data-rmo-id="70184207" data-rmo-title="Shameless (U.S.)" data-rmo-year="2011" data-rmo-type="series" data-rmo-runtime="45">
+  <div data-uia="billboard-title"><img alt="LOGO|abc" data-uia="billboard-logo">
+    <div data-uia="attributes-elements"><span class="e1" data-uia="kind">Series</span><p aria-hidden="true" class="sep" id="sep-1">•</p><span class="e1">Drama</span><p aria-hidden="true" class="sep">•</p><span class="e1">2011</span><p aria-hidden="true" class="sep">•</p><span class="maturity">A</span></div>
+  </div>
+</section>
+`
+
+describe("readBillboard and renderBillboardRating", () => {
+  test("reads the stamped billboard and joins its metadata line in its own markup", () => {
+    const doc = page(BILLBOARD + CARDS)
+    const billboard = readBillboard(doc)
+    expect(billboard?.query).toEqual({
+      runtime: 45,
+      title: "Shameless (U.S.)",
+      type: "series",
+      year: 2011,
+    })
+    expect(billboard?.anchor.getAttribute("data-uia")).toBe("attributes-elements")
+    renderBillboardRating(billboard!.anchor, rating({ imdbRating: 8.5, imdbVotes: 300000 }))
+    renderBillboardRating(billboard!.anchor, rating({ imdbRating: 8.5, imdbVotes: 300000 }))
+    const added = [...billboard!.anchor.querySelectorAll(".rmo-panel")]
+    expect(added.map((n) => n.tagName + ":" + n.textContent)).toEqual(["P:•", "SPAN:IMDb 8.5"])
+    expect(added[0]?.classList.contains("sep")).toBe(true)
+    expect(added[0]?.hasAttribute("id")).toBe(false)
+    expect(added[1]?.classList.contains("e1")).toBe(true)
+    expect(added[1]?.classList.contains("maturity")).toBe(false)
+    expect(added[1]?.hasAttribute("data-uia")).toBe(false)
+    expect(added[1]?.getAttribute("title")).toBe("300K votes on IMDb")
+    expect(hasBillboardRating(billboard!.anchor)).toBe(true)
+    renderBillboardRating(billboard!.anchor, rating({ found: false }))
+    expect(hasBillboardRating(billboard!.anchor)).toBe(false)
+    expect(billboard!.anchor.textContent).toBe("Series•Drama•2011•A")
+  })
+
+  test("an unstamped billboard, or one without a metadata line, is nothing to ask about", () => {
+    expect(readBillboard(page(BILLBOARD.replace(" data-rmo-meta", "")))).toBeNull()
+    expect(readBillboard(page(BILLBOARD.replace('data-uia="attributes-elements"', "")))).toBeNull()
+  })
+})
+
+// The preview's own stamp has only the id and title; the card it hovers over (same id) has the year, kind, and length.
+const MINI = `
+<a href="/browse?jbv=81715790" aria-label="72 HOURS" data-uia="standard-card" data-rmo-meta data-rmo-id="81715790" data-rmo-year="2026" data-rmo-type="movie" data-rmo-runtime="105"><div><img alt=""></div></a>
+<div class="previewModal--container mini-modal" data-rmo-meta data-rmo-id="81715790" data-rmo-title="72 HOURS">
+  <div data-uia="videoMetadata--container" class="videoMetadata--container"><div class="videoMetadata--line"><div class="maturity-rating"><span class="maturity-number">A</span></div><span class="duration">1h 45m</span><span class="player-feature-badge">HD</span></div></div>
+</div>
+`
+
+describe("the hover preview", () => {
+  test("reads its stamp for the title, year, and kind, and adds the rating beside the duration", () => {
+    const doc = page(MINI)
+    const modal = readModal(doc)
+    expect(modal?.kind).toBe("line")
+    expect(modal?.query).toEqual({ runtime: 105, title: "72 HOURS", type: "movie", year: 2026 })
+    renderPanel(modal!.anchor, rating({ imdbRating: 5.4, imdbVotes: 20209 }))
+    renderPanel(modal!.anchor, rating({ imdbRating: 5.4, imdbVotes: 20209 }))
+    const items = [...modal!.anchor.querySelectorAll(".rmo-panel")]
+    expect(items.map((i) => i.className + ":" + i.textContent)).toEqual([
+      "duration rmo-panel:IMDb 5.4",
+    ])
+    expect(items[0]?.getAttribute("title")).toBe("20.2K votes on IMDb")
+    expect(hasPanel(modal!.anchor)).toBe(true)
+    renderPanel(modal!.anchor, rating({ found: false }))
+    expect(modal!.anchor.textContent).toBe("A1h 45mHD")
+  })
+
+  test("a preview whose card is gone keeps its title and its duration's kind but no year, and an unstamped one is nothing to ask about", () => {
+    const alone = page(MINI.replace(/<a [^>]*>.*?<\/a>\n/s, ""))
+    expect(readModal(alone)?.query).toEqual({ title: "72 HOURS", type: "movie" })
+    expect(readModal(page(MINI.replace(/ data-rmo-[a-z]+="[^"]*"| data-rmo-meta/g, "")))).toBeNull()
+  })
+})
+
 describe("readModal and renderPanel", () => {
   test("reads the title, year, and kind, and inserts the ratings row after the metadata", () => {
     const doc = page(MODAL)
     const modal = readModal(doc)
     expect(modal?.query).toEqual({ title: "Dune", type: "movie", year: 2021 })
     expect(modal?.anchor.className).toBe("previewModal--detailsMetadata-right")
+    expect(modal?.kind).toBe("details")
 
     renderPanel(modal!.anchor, rating({ imdbId: "tt1160419", imdbRating: 8.0, imdbVotes: 900000 }))
     renderPanel(modal!.anchor, rating({ imdbId: "tt1160419", imdbRating: 8.0, imdbVotes: 900000 }))
@@ -202,6 +303,32 @@ describe("readModal and renderPanel", () => {
     renderPanel(modal!.anchor, rating({ imdbRating: null, imdbVotes: null }))
     expect(doc.querySelector(".rmo-panel")).toBeNull()
     expect(hasPanel(modal!.anchor)).toBe(false)
+  })
+
+  test("a More Like This card is a card: stamped id, year, and kind, badge on the artwork's left corner", () => {
+    const doc = page(MODAL)
+    const cards = findCards(doc).filter(
+      (c) => c.getAttribute("data-uia") === "titleCard--container",
+    )
+    expect(cards.length).toBe(2)
+    expect(readCard(cards[0] as Element)).toEqual({
+      id: "81521988",
+      pending: false,
+      runtime: 101,
+      title: "Little Brother",
+      type: "movie",
+      year: 2026,
+    })
+    expect(readCard(cards[1] as Element)).toEqual({
+      id: "Not Yet Stamped",
+      pending: true,
+      title: "Not Yet Stamped",
+    })
+    renderBadge(cards[0] as Element, rating({ imdbRating: 6.4 }))
+    const badge = doc.querySelector(".rmo-badge")
+    expect(badge?.parentElement?.classList.contains("titleCard-imageWrapper")).toBe(true)
+    expect(badge?.className).toBe("rmo-badge rmo-badge--left")
+    expect(badge?.textContent).toBe("6.4")
   })
 
   test("removeAll clears every badge and panel", () => {

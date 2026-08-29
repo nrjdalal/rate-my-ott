@@ -5,7 +5,7 @@ import { z } from "zod"
 
 import { ApiError, indexErrorResponses, validationErrorResponses } from "@/lib/error"
 import { TITLE_TYPES } from "@/lib/lookup"
-import { lookupRatings, type Rating } from "@/lib/ratings"
+import { indexStatus, lookupRatings, type Rating } from "@/lib/ratings"
 
 // The most titles one request will look up: a Netflix row holds a few dozen cards and the extension flushes what it sees in short windows, so fifty covers a burst in one round trip to the index.
 export const MAX_TITLES = 50
@@ -51,6 +51,16 @@ const asResponse = (row: Rating) => ({
   year: row.year,
 })
 
+// What the newest rebuild wrote, or null while the index has never been built.
+const indexSchema = z
+  .object({
+    akas: z.number().meta({ example: 56088 }),
+    finishedAt: z.string().meta({ format: "date-time", example: "2026-08-29T14:33:00.000Z" }),
+    names: z.number().meta({ example: 775897 }),
+    titles: z.number().meta({ example: 619222 }),
+  })
+  .nullable()
+
 const invalid = (result: { success: boolean; error?: unknown }) => {
   if (!result.success) {
     throw new ApiError(400, "VALIDATION_ERROR", "Invalid input", { issues: result.error })
@@ -58,6 +68,40 @@ const invalid = (result: { success: boolean; error?: unknown }) => {
 }
 
 export const ratingsRouter = new Hono()
+  // Named status, not index: Hono's RPC client drops a path segment called index as the directory index.
+  .get(
+    "/status",
+    describeRoute({
+      tags: ["Ratings"],
+      description:
+        "What the IMDb index holds and when it was last rebuilt: the newest rebuild's record, or null while the index has never been built (the ratings routes answer 503 then). The extension's popup shows it.",
+      responses: {
+        200: {
+          description: "OK",
+          content: {
+            "application/json": {
+              schema: resolver(z.object({ data: z.object({ index: indexSchema }) })),
+            },
+          },
+        },
+      },
+    }),
+    async (c) => {
+      const status = await indexStatus()
+      return c.json({
+        data: {
+          index: status
+            ? {
+                akas: status.akas,
+                finishedAt: status.finishedAt.toISOString(),
+                names: status.names,
+                titles: status.titles,
+              }
+            : null,
+        },
+      })
+    },
+  )
   .get(
     "/",
     describeRoute({

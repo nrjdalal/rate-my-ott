@@ -3,7 +3,7 @@ import { defineBackground } from "wxt/utils/define-background"
 import { storage } from "wxt/utils/storage"
 
 import { createApiClient, unwrap, type Rating, type TitleQuery } from "@/utils/api"
-import type { HealthReply, LookupReply, Message } from "@/utils/messages"
+import type { HealthReply, IndexReply, LookupReply, Message } from "@/utils/messages"
 import { settings } from "@/utils/settings"
 
 // The only context that talks to the API: it holds the host permission that lets a cross-origin call skip CORS, and one place to batch and cache keeps every Netflix tab from asking twice.
@@ -59,8 +59,18 @@ async function health(): Promise<HealthReply> {
   return error ? { error: error.message, version: null } : { error: null, version: data.version }
 }
 
-const handle = (message: Message): Promise<HealthReply | LookupReply> =>
-  message.type === "api:health" ? health() : lookup(message.titles)
+async function indexStatus(): Promise<IndexReply> {
+  const current = await settings.getValue()
+  const { data, error } = await unwrap(createApiClient(current.apiUrl).v1.ratings.status.$get())
+  return error ? { error: error.message, index: null } : { error: null, index: data.index }
+}
+
+const handle = (message: Message): Promise<HealthReply | IndexReply | LookupReply> =>
+  message.type === "api:health"
+    ? health()
+    : message.type === "api:index"
+      ? indexStatus()
+      : lookup(message.titles)
 
 export default defineBackground(() => {
   browser.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {

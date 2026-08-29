@@ -1,0 +1,33 @@
+---
+slug: /docs/getting-started/development
+label: Development
+title: Run the stack
+description: Run the API, the site, and a live-reloading extension build locally, with your own IMDb index.
+---
+
+Only for working on the extension or the API. To use the extension, [Install](/docs/getting-started/install) is all there is.
+
+## 1. Run the stack
+
+```bash
+bun install
+bun run db:migrate   # once, after POSTGRES_URL is set (bunx pglaunch -k gives you a disposable Postgres)
+bun run imdb:sync    # builds the IMDb index: ~750 MB from IMDb's datasets, a minute or two
+bun run dev
+```
+
+The ratings route answers `503` until the index is built; rerun `bun run imdb:sync` whenever you want fresher scores (production does it nightly).
+
+This serves the web app and the API on named portless URLs (`bunx portless list` shows them) and builds the extension in watch mode into `extension/wxt/.output/chrome-mv3-dev`. `PORTLESS=0 bun run dev` uses the fixed ports instead (web `:3000`, API `:4000`).
+
+## 2. Load the dev build
+
+In Chrome, open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and pick `extension/wxt/.output/chrome-mv3-dev`. The extension rebuilds as you edit; click the reload icon on its card (or press `Alt+R` on a Netflix tab) to pick up a new build.
+
+## 3. Point it at your API
+
+The build bakes `WXT_PUBLIC_API_URL` from `.env` (`http://localhost:4000` by default, the fixed-port API) as the extension's API origin. Under portless the API is at `http://api.rate-my-ott.localhost:1355` instead, so open the extension's **Options** page, paste that URL, and click **Test**: it should report the API version. A dev build already holds the host permission for both hosts, so no rebuild is needed.
+
+## Production builds
+
+`bun run build` writes `extension/wxt/.output/chrome-mv3` without the dev client, and `cd extension/wxt && bun run zip` packs it. `cd extension/wxt && bun run build:firefox` writes `.output/firefox-mv3` (Manifest V3 there too, with the add-on id a signed update channel keys on); load it from `about:debugging` as a temporary add-on. The release workflow builds both against the hosted API and attaches them to every GitHub release.

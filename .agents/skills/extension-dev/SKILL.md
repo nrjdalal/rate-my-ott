@@ -12,11 +12,11 @@ source: local
 
 | Concern | File |
 | --- | --- |
-| Which Netflix nodes are titles, and how a badge/panel is drawn | `utils/netflix.ts` (pure DOM functions; tested from `tests/extension/wxt/utils/netflix.test.ts` in happy-dom) |
+| Which Netflix nodes are titles (cards, the modal's "More Like This" cards, the hover preview, the billboard), and how a badge, the modal row, the preview's line item, and the billboard line are drawn | `utils/netflix.ts` (pure DOM functions; tested from `tests/extension/wxt/utils/netflix.test.ts` in happy-dom) |
 | A card's year, kind, and runtime, read from React's fiber props in the page's own world and stamped on the card as `data-rmo-*` | `entrypoints/netflix-entities.content.ts` (`world: "MAIN"`, no extension APIs) over `utils/netflix-props.ts` (pure; tested with a fake fiber chain) |
 | The scan loop: observe the page, batch titles, paint answers | `entrypoints/netflix.content.ts` |
 | The badge and panel styles injected into netflix.com | `assets/netflix.css` (every rule prefixed `rmo-`; no Tailwind, no reset, nothing that restyles the page) |
-| The only place that talks to the API, with a session cache | `entrypoints/background.ts` |
+| The only place that talks to the API, with a session cache; also answers the popup's index status (`api:index`) and the options page's probe (`api:health`) | `entrypoints/background.ts` |
 | The typed client and `unwrap` | `utils/api.ts` |
 | The message protocol between page, popup/options, and background | `utils/messages.ts` |
 | Settings (API URL, on/off switches), synced storage | `utils/settings.ts` |
@@ -30,7 +30,7 @@ The API URL is baked at build from the repo-root `.env` (`WXT_PUBLIC_API_URL`, r
 ```bash
 bun run dev                                  # web + api + extension in watch mode to .output/chrome-mv3-dev (no browser is launched)
 cd extension/wxt && bun run build            # production build to .output/chrome-mv3
-cd extension/wxt && bun run build:firefox    # .output/firefox-mv3
+cd extension/wxt && bun run build:firefox    # .output/firefox-mv3 (Manifest V3 there too; the manifest carries the gecko id rate-my-ott@nrjdalal.com, which a signed update channel keys on, and declares no data collection)
 cd extension/wxt && bun run zip              # rate-my-ott-<version>-chrome.zip in .output/ (version = root package.json)
 ```
 
@@ -38,7 +38,7 @@ Chrome: `chrome://extensions`, Developer mode, Load unpacked, pick `extension/wx
 
 ## Releases
 
-The release workflow (`.github/workflows/auto-release.yml`, on a canary-to-main merge) builds `bun run zip` and `zip:firefox` with `WXT_PUBLIC_API_URL` from the repo variable of that name (the production API) and uploads both zips to the GitHub release; the manifest version comes from the root `package.json`, which the same flow bumps. A local production zip is the same two commands with the URL set inline.
+The release workflow (`.github/workflows/auto-release.yml`, on a canary-to-main merge) builds `bun run zip` and `zip:firefox` with `WXT_PUBLIC_API_URL` from the repo variable of that name (the production API) and uploads both zips to the GitHub release, plus an unversioned copy of each (`rate-my-ott-chrome.zip`, `rate-my-ott-firefox.zip`) so the `releases/latest/download/` links on the site stay stable; the manifest version comes from the root `package.json`, which the same flow bumps. A local production zip is the same two commands with the URL set inline.
 
 ## Verify a change
 
@@ -52,7 +52,7 @@ agent-browser open https://www.netflix.com/browse && agent-browser wait 10000
 agent-browser eval "JSON.stringify({ stamped: document.querySelectorAll('[data-rmo-meta]').length, badges: document.querySelectorAll('.rmo-badge').length })"
 ```
 
-An unpacked extension is read at launch, so a rebuild needs `agent-browser close --all` and a fresh `open`. Check the home page (current `jbv` cards) and a genre page such as `/browse/genre/83` (legacy `.title-card` markup, read through its `videoModel`): stamps on every card, a badge on every card the index matches, an "IMDb:" row in a title's details column (beside Cast and Genres) when you open it, and the popup switches taking effect without a reload. `console.warn("[rate-my-ott]", ...)` on the Netflix tab names an API failure; a `400` for a whole batch means one title broke the route's validation.
+An unpacked extension is read at launch, so a rebuild needs `agent-browser close --all` and a fresh `open`; Chrome also keeps the previous background service worker for an unpacked id, so after a change to `background.ts` copy the build to a new directory (a new id) before loading it. The popup is reachable headless at `chrome-extension://<id>/popup.html`, where the id is the first 32 hex characters of the SHA-256 of the build directory's absolute path mapped 0-9a-f to a-p. Check the home page (current `jbv` cards, and the billboard's metadata line gaining "• IMDb 8.5"), a genre page such as `/browse/genre/83` (legacy `.title-card` markup, read through its `videoModel`), a hovered card (its preview's metadata line gaining "IMDb 5.4" beside the duration; `agent-browser hover "a[data-uia='standard-card']"`), and an open title (an "IMDb:" row in its details column beside Cast and Genres, and a badge at the top-left of each "More Like This" card, whose top-right holds Netflix's duration): stamps on every card, a badge on every card the index matches, and the popup switches taking effect without a reload. Search results cannot be badged: Netflix's search entities carry no year, and the API matches nothing without one. `console.warn("[rate-my-ott]", ...)` on the Netflix tab names an API failure; a `400` for a whole batch means one title broke the route's validation.
 4. If cards get no badge: the options page's **Test** button tells whether the API is reachable from the background; if it is, check `utils/netflix.ts` against the current Netflix DOM and add the new shape to the fixture test first. As of 2026-08 a card is `a[data-uia="standard-card"|"ranked-card"|"progress-card"][aria-label][href="/browse?jbv=<id>"]` wrapping an `<img>` in a plain div (class names are Emotion hashes, only `data-uia` and the semantic `tracked-card` classes are stable), and the open title modal is `.previewModal--container` with `[data-uia="videoMetadata--container"]` (`.year`, `.duration`) and `?jbv=<id>` in the URL naming the card it came from. The legacy `.title-card` / `a.slider-refocus` / `.fallback-text` markup (genre pages) is still supported, and its React `videoModel` prop (`releaseYear`, `summary.type`, `summary.id`) is where the stamper reads its year and kind. A card's year, kind, and runtime are not in its markup at all: the MAIN-world script reads them from the card's React fiber (the card props carry `videoId` + `title`, the row props carry `sectionFragment.entities.edges[].node.unifiedEntity` with `__typename` Movie/Show, `releaseYear`, `runtimeSec`) and stamps `data-rmo-meta`, `data-rmo-year`, `data-rmo-type`, `data-rmo-runtime`; the scanner asks only once a card is stamped with a year (the API matches nothing without one) and the API uses kind, year, and runtime to reject a same-name stranger (the 2026 "Alpha" on Netflix is Alia Bhatt's, not Julia Ducournau's); a stamp must name the card's own video id, so a row's or billboard's model above it is ignored.
 5. Verify with a production build (`bun run build`, load `.output/chrome-mv3`). The dev build registers its content script at runtime and, after WXT reloads the extension on a rebuild, the script did not run again on a reloaded Netflix tab in testing (no badge, and `.rmo-badge` had no CSS), so a missing badge on a dev build is not evidence of a scanner bug.
 

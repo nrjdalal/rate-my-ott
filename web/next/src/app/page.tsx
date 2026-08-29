@@ -1,7 +1,15 @@
 import { features, site } from "@packages/config/site"
-import { RiArrowRightLine, RiFilmLine, RiFlashlightLine, RiStarFill } from "@remixicon/react"
+import {
+  RiArrowRightLine,
+  RiChromeLine,
+  RiFilmLine,
+  RiFirefoxLine,
+  RiFlashlightLine,
+  RiStarFill,
+} from "@remixicon/react"
 import Link from "next/link"
 
+import { IndexStat } from "@/components/index-stat"
 import { Button } from "@/components/ui/button"
 
 const steps = [
@@ -37,6 +45,13 @@ const facts = [
   },
 ]
 
+// The latest release's zips under stable names (the release workflow uploads an unversioned copy of each).
+const DOWNLOADS = {
+  chrome: "https://github.com/nrjdalal/rate-my-ott/releases/latest/download/rate-my-ott-chrome.zip",
+  firefox:
+    "https://github.com/nrjdalal/rate-my-ott/releases/latest/download/rate-my-ott-firefox.zip",
+}
+
 export default function Home() {
   return (
     <>
@@ -52,9 +67,17 @@ export default function Home() {
             </h1>
             <p className="text-muted-foreground max-w-xl text-lg">{site.description}</p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+              <Button render={<a href={DOWNLOADS.chrome} />}>
+                <RiChromeLine aria-hidden="true" />
+                Download for Chrome
+              </Button>
+              <Button variant="outline" render={<a href={DOWNLOADS.firefox} />}>
+                <RiFirefoxLine aria-hidden="true" />
+                Firefox
+              </Button>
               {features.docs && (
-                <Button render={<Link href="/docs/getting-started/install" />}>
-                  Install the extension
+                <Button variant="ghost" render={<Link href="/docs/getting-started/install" />}>
+                  How to install
                   <RiArrowRightLine aria-hidden="true" />
                 </Button>
               )}
@@ -67,6 +90,10 @@ export default function Home() {
                 </Button>
               )}
             </div>
+            <p className="text-muted-foreground mt-4 text-xs">
+              Unzip, then load the folder from chrome://extensions with Developer mode on.
+            </p>
+            <IndexStat />
           </div>
         </section>
 
@@ -114,7 +141,10 @@ export default function Home() {
         >
           IMDb
         </a>
-        . Used with permission. Not affiliated with Netflix.
+        . Used with permission. Not affiliated with Netflix.{" "}
+        <Link href="/docs/privacy" className="underline">
+          Privacy
+        </Link>
       </footer>
     </>
   )

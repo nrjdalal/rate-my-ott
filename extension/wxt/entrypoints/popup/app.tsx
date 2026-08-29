@@ -1,11 +1,31 @@
 import { site } from "@packages/config/site"
+import { useEffect, useState } from "react"
 import { browser } from "wxt/browser"
 
 import { SwitchRow } from "@/components/switch-row"
 import { useSettings } from "@/components/use-settings"
+import { compactCount, relativeTime } from "@/utils/format"
+import type { IndexReply, Message } from "@/utils/messages"
+
+// What the popup says about the index: unknown while asking, then the API's answer or its failure.
+type Status = { state: "asking" } | { reply: IndexReply; state: "answered" }
 
 export function App() {
   const [current, update] = useSettings()
+  const [status, setStatus] = useState<Status>({ state: "asking" })
+
+  useEffect(() => {
+    const message: Message = { type: "api:index" }
+    browser.runtime
+      .sendMessage(message)
+      .then((reply: IndexReply) => setStatus({ reply, state: "answered" }))
+      .catch((error: unknown) =>
+        setStatus({
+          reply: { error: error instanceof Error ? error.message : String(error), index: null },
+          state: "answered",
+        }),
+      )
+  }, [])
 
   return (
     <main className="w-72 bg-white p-4 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
@@ -39,6 +59,17 @@ export function App() {
       ) : (
         <p className="py-4 text-center text-xs text-neutral-500">Loading…</p>
       )}
+      <p className="mt-3 text-xs text-neutral-500" role="status">
+        {status.state === "asking" && "Checking the IMDb index…"}
+        {status.state === "answered" &&
+          (status.reply.error ? (
+            <span className="text-red-600">API unreachable: {status.reply.error}</span>
+          ) : status.reply.index ? (
+            `IMDb index: ${compactCount(status.reply.index.titles)} titles, refreshed ${relativeTime(status.reply.index.finishedAt)}`
+          ) : (
+            <span className="text-amber-600">The IMDb index has not been built yet</span>
+          ))}
+      </p>
       <footer className="mt-3 flex items-center justify-between text-xs text-neutral-500">
         <button
           type="button"

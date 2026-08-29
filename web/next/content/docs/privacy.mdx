@@ -1,0 +1,23 @@
+---
+slug: /docs/privacy
+title: Privacy
+description: What the extension sends, what the API keeps, and what neither does.
+---
+
+Rate My OTT shows ratings; it does not collect anything about you.
+
+## What the extension sends
+
+For every title card, hero, or open title on a Netflix page, the extension's background worker sends the Ratings API the title's name and, when Netflix's page states them, its kind (film or series), release year, and runtime. Nothing else: no account, no profile, no viewing history, no cookies, no page URL, no identifier of you or your browser. The requests go only to the API origin baked into the build (the hosted one, or the one you set on the options page).
+
+## What the API keeps
+
+The API answers each request from its IMDb index and keeps no record of it: no request log of titles, no per-user state, no analytics. Its host (Vercel) keeps standard, short-lived access logs (IP address, time, path) for operating the service, as any web host does.
+
+## What stays in your browser
+
+The extension remembers answers within the browser session (session storage, cleared when the browser closes): a found rating for twelve hours, a miss for ten minutes, so a title seen twice is asked once, and stores your settings (the API URL and the on/off switches) in Chrome's synced extension storage. It reads nothing else.
+
+## The data
+
+Ratings are from IMDb's datasets, used under IMDb's non-commercial terms ("Information courtesy of IMDb. Used with permission."). The extension is open source; every request it makes is in `extension/wxt/entrypoints/background.ts`, and every field the API reads is in `api/hono/src/routers/ratings.ts`.
